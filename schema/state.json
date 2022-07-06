@@ -3,16 +3,25 @@
   "title": "State",
   "type": "object",
   "required": [
-    "count",
-    "owner"
+    "minter",
+    "name",
+    "num_tokens",
+    "symbol"
   ],
   "properties": {
-    "count": {
-      "type": "integer",
-      "format": "int32"
-    },
-    "owner": {
+    "minter": {
       "$ref": "#/definitions/Addr"
+    },
+    "name": {
+      "type": "string"
+    },
+    "num_tokens": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "symbol": {
+      "type": "string"
     }
   },
   "definitions": {

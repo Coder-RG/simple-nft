@@ -89,8 +89,7 @@ pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> StdResult<Binary> {
 }
 
 pub fn query_config(deps: Deps) -> State {
-    let config = CONFIG.load(deps.storage).unwrap();
-    config
+    CONFIG.load(deps.storage).unwrap()
 }
 
 #[cfg(test)]

@@ -3,12 +3,17 @@
   "title": "InstantiateMsg",
   "type": "object",
   "required": [
-    "count"
+    "name",
+    "symbol"
   ],
   "properties": {
-    "count": {
-      "type": "integer",
-      "format": "int32"
+    "name": {
+      "description": "Name of the NFT",
+      "type": "string"
+    },
+    "symbol": {
+      "description": "Symbol of the NFT",
+      "type": "string"
     }
   }
 }
