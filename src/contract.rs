@@ -1,8 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{
-    to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
-};
+use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult};
+
+use cw2::set_contract_version;
 
 use crate::state::{State, CONFIG};
 use crate::{
@@ -21,6 +21,7 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     if msg.name.is_empty() {
         return Err(ContractError::CustomError {
             val: String::from("length of `name` should be greater than 1"),
@@ -57,7 +58,9 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::TransferNft { .. } => handle_transfer_nft(deps, env, info, msg),
-        _ => panic!("not Implemented"),
+        _ => Err(ContractError::CustomError {
+            val: String::from("Not implemented"),
+        }),
         // ExecuteMsg::SendNft { .. } => handle_send_nft(deps, env, info, msg),
         // ExecuteMsg::Approve { .. } => handle_approve(deps, env, info, msg),
         // ExecuteMsg::ApproveAll { .. } => handle_approve_all(deps, env, info, msg),
@@ -68,10 +71,10 @@ pub fn execute(
 }
 
 pub fn handle_transfer_nft(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    msg: ExecuteMsg,
+    _deps: DepsMut,
+    _env: Env,
+    _info: MessageInfo,
+    _msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     Err(ContractError::CustomError {
         val: String::from("Not implemented"),
@@ -79,15 +82,22 @@ pub fn handle_transfer_nft(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
-    panic!("Not Implemented")
+pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> StdResult<Binary> {
+    Err(StdError::GenericErr {
+        msg: String::from("Not implemented"),
+    })
+}
+
+pub fn query_config(deps: Deps) -> State {
+    let config = CONFIG.load(deps.storage).unwrap();
+    config
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins, from_binary};
+    use cosmwasm_std::{coins, Addr};
 
     const DENOM: &str = "ubit";
 
@@ -97,30 +107,41 @@ mod tests {
 
     #[test]
     fn proper_initialization() {
+        // Create mock dependencies and environment
         let mut deps = mock_dependencies();
         let env = mock_env();
-
-        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
         let info = mock_info("creator", &coins(0, &DENOM.to_string()));
 
-        // we can just call .unwrap() to assert this was a success
+        // sample InstantiateMsg
+        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
+
+        // Upon currect instantiation, there will be no response; as expected.
         let res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
         assert_eq!(0, res.messages.len());
 
+        // Check if the correct values are stored.
+        let stored_state = query_config(deps.as_ref());
+        assert_eq!(stored_state.name, "TestNFT");
+        assert_eq!(stored_state.symbol, "NFT");
+        assert_eq!(stored_state.num_tokens, 0u64);
+        assert_eq!(stored_state.minter, Addr::unchecked("creator"));
+
+        // Following tests are to check correct error when no value is given
+        // to either of the fields in InstantiateMsg.
         let msg = init_msg(String::new(), "NFT".to_string());
         let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap_err();
 
         match res {
-            ContractError::CustomError { val } => {}
-            e => panic!(e),
+            ContractError::CustomError { .. } => {}
+            e => panic!("{:?}", e),
         }
 
         let msg = init_msg(String::from("TestNFT"), String::new());
         let res = instantiate(deps.as_mut(), env, info, msg).unwrap_err();
 
         match res {
-            ContractError::CustomError { val } => {}
-            e => panic!(e),
+            ContractError::CustomError { .. } => {}
+            e => panic!("{:?}", e),
         }
     }
 }
