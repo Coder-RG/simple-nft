@@ -69,7 +69,7 @@ pub struct MintMsg {
 pub enum QueryMsg {
     // The price of the token
     AskingPrice {
-        token_id: String,
+        token_id: u64,
     },
 
     // Owner of the token

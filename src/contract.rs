@@ -1,14 +1,14 @@
 //! This module implements `instantiate`, `execute` and `query`.
 //! These actions are performed using *wasmd*.
 
-#[cfg(not(feature = "library"))]
-use cosmwasm_std::{entry_point, to_binary};
+// #[cfg(not(feature = "library"))]
 use cosmwasm_std::{
-    Binary, CustomMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
+    entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
 };
 
 use cw2::set_contract_version;
 
+use crate::msg::AskingPriceResponse;
 // use crate::msg::{ApprovedResponse, AskingPriceResponse};
 use crate::state::{State, TokenInfo, CONFIG, TOKENS};
 use crate::{
@@ -20,6 +20,7 @@ use crate::{
 const CONTRACT_NAME: &str = "crates.io:simple-nft";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Initialise a new instance of this contract.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -56,12 +57,12 @@ pub fn instantiate(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn execute<C: CustomMsg>(
+pub fn execute(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
-) -> Result<Response<C>, ContractError> {
+) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::TransferNft {
             recipient,
@@ -79,14 +80,14 @@ pub fn execute<C: CustomMsg>(
     }
 }
 
-pub fn handle_transfer_nft<C: CustomMsg>(
+pub fn handle_transfer_nft(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
     recipient: String,
     token_id: u64,
-) -> Result<Response<C>, ContractError> {
-    let mut requested_token = TOKENS.load(deps.storage, token_id.clone())?;
+) -> Result<Response, ContractError> {
+    let mut requested_token = TOKENS.load(deps.storage, token_id)?;
 
     if requested_token.owner != info.sender {
         return Err(ContractError::Unauthorized);
@@ -104,14 +105,14 @@ pub fn handle_transfer_nft<C: CustomMsg>(
         .add_attribute("token_id", token_id.to_string()))
 }
 
-pub fn handle_mint<C: CustomMsg>(
+pub fn handle_mint(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
     msg: MintMsg,
-) -> Result<Response<C>, ContractError> {
+) -> Result<Response, ContractError> {
     // Load current contract state
-    let mut config = CONFIG.load(deps.storage)?;
+    let mut config = query_config(deps.as_ref());
 
     // sender and minter address should be same
     if info.sender != config.minter {
@@ -133,12 +134,10 @@ pub fn handle_mint<C: CustomMsg>(
         approvals: None,
         token_uri: None,
         base_price: msg.price,
-        token_id: num_tokens.clone(),
+        token_id: num_tokens,
     };
     // Save the new token to storage
-    TOKENS
-        .save(deps.storage, num_tokens.clone(), &token)
-        .unwrap();
+    TOKENS.save(deps.storage, num_tokens, &token).unwrap();
 
     // Increase the number of tokens issues in state
     config.num_tokens = num_tokens;
@@ -152,16 +151,22 @@ pub fn handle_mint<C: CustomMsg>(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(_deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        // QueryMsg::AskingPrice { token_id } => query_asking_price(deps, env, msg),
+        QueryMsg::AskingPrice { token_id } => query_asking_price(deps, env, token_id),
         _ => Err(StdError::NotFound {
             kind: String::from("Not Implemented"),
         }),
     }
 }
 
-// pub fn query_asking_price(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {}
+pub fn query_asking_price(deps: Deps, _env: Env, token_id: u64) -> StdResult<Binary> {
+    let token_info = query_tokens(deps, token_id);
+    let response = AskingPriceResponse {
+        price: token_info.base_price[0].clone(),
+    };
+    to_binary(&response)
+}
 
 pub fn query_config(deps: Deps) -> State {
     CONFIG.load(deps.storage).unwrap()

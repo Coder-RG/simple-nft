@@ -1,4 +1,3 @@
 # Simple NFT contract
 
-This is my first implementation of a simple nft contract, while learning
-CosmWasm.
+A simple nft contract built using CosmWasm.
