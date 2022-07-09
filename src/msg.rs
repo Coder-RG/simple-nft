@@ -1,3 +1,5 @@
+//! Defines *InstantiateMsg*, *ExecuteMsg* and *QueryMsg*.
+
 use cosmwasm_std::{Binary, Coin};
 use cw721::{Approval, Expiration};
 use schemars::JsonSchema;
@@ -18,7 +20,7 @@ pub struct InstantiateMsg {
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
     /// Transfer is a base message to move a token to another account without triggering actions
-    TransferNft { recipient: String, token_id: String },
+    TransferNft { recipient: String, token_id: u64 },
     /// Send is a base message to transfer a token to a contract and trigger an action
     /// on the receiving contract.
     SendNft {
@@ -51,7 +53,7 @@ pub enum ExecuteMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct MintMsg {
     /// Unique ID of the NFT
-    pub token_id: String,
+    pub token_id: u32,
     /// The owner of the newly minter NFT
     pub owner: String,
     /// Universal resource identifier for this NFT
@@ -59,7 +61,7 @@ pub struct MintMsg {
     /// Metadata JSON Schema
     pub token_uri: Option<String>,
     /// Price of the token
-    pub price: Coin,
+    pub price: Vec<Coin>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -6,14 +6,16 @@ pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
 
+    /// Only authorized entities are allowed to execute
     #[error("Unauthorized")]
-    Unauthorized {},
+    Unauthorized,
 
+    /// If the token has already been claimed
     #[error("token_id already claimed")]
-    Claimed {},
+    Claimed,
 
     #[error("Cannot set approval that is already expired")]
-    Expired {},
+    Expired,
 
     #[error("Approval not found for: {spender}")]
     ApprovalNotFound { spender: String },
