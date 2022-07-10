@@ -20,7 +20,9 @@
               "type": "string"
             },
             "token_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             }
           }
         }
@@ -262,15 +264,16 @@
         },
         "price": {
           "description": "Price of the token",
-          "allOf": [
-            {
-              "$ref": "#/definitions/Coin"
-            }
-          ]
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Coin"
+          }
         },
         "token_id": {
           "description": "Unique ID of the NFT",
-          "type": "string"
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
         },
         "token_uri": {
           "description": "Universal resource identifier for this NFT Should point to a JSON file that conforms to the ERC721 Metadata JSON Schema",

@@ -180,7 +180,7 @@ pub fn query_tokens(deps: Deps, token_id: u64) -> TokenInfo {
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins, Addr};
+    use cosmwasm_std::{coins, from_binary, Addr, Coin, Uint128};
 
     const DENOM: &str = "ubit";
 
@@ -299,5 +299,39 @@ mod tests {
         let res: Response = execute(deps.as_mut(), env, info, msg).unwrap();
         assert_eq!(0, res.messages.len());
         assert_eq!(4, res.attributes.len());
+    }
+
+    #[test]
+    fn asking_price() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+
+        let info = mock_info("minter", &coins(0u128, &DENOM.to_string()));
+        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
+        let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+        assert_eq!(res.messages.len(), 0);
+
+        let mint_msg = MintMsg {
+            token_id: 0,
+            owner: String::from("creator"),
+            token_uri: None,
+            price: coins(1000, DENOM.to_string()),
+        };
+
+        let msg = ExecuteMsg::Mint(mint_msg);
+        let res: Response = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+        assert_eq!(0, res.messages.len());
+        assert_eq!(4, res.attributes.len());
+
+        let query_msg = QueryMsg::AskingPrice { token_id: 1 };
+        let res = query(deps.as_ref(), env, query_msg).unwrap();
+        let res: AskingPriceResponse = from_binary(&res).unwrap();
+        assert_eq!(
+            res.price,
+            Coin {
+                amount: Uint128::from(1000u64),
+                denom: DENOM.to_string()
+            }
+        );
     }
 }
