@@ -297,4 +297,34 @@ $ wasmd query wasm contract-state all $CONTRACT $NODE --output json | jq -r '.mo
   "token_id": 2
 }
 ```
+
 ### Query
+
+A simple query has been implemented in this smart contract which returns the
+price of the NFT.
+
+18. Create the query message
+
+```zsh
+$ QUERY='{"asking_price":{"token_id":1}}'
+```
+
+19. Query the smart contract for the price
+
+```zsh
+$ wasmd query wasm contract-state smart $CONTRACT "$QUERY" $NODE --output json | jq .
+```
+**output**
+```json
+{
+  "data": {
+    "price": {
+      "denom": "umlg",
+      "amount": "1000"
+    }
+  }
+}
+```
+
+Smart queries are a better option than using the command: 
+`wasmd query wasm contract-state all $CONTRACT $NODE --output json | jq -r '.models[0].value' | base64 -d | jq .`. This is because `.models[0].value` might not always refer to the same value after state changes are made during execution.
