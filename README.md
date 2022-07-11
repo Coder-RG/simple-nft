@@ -22,20 +22,22 @@ docker run --rm -v "$(pwd)":/code \
 This will create a *.wasm* binary file in *artifacts/* folder.
 
 ### Deploy
-To deploy the binary file, use *wasmd*.
+To store the binary file on blockchain, use *wasmd*.
 
 ```zsh
 RES=$(wasmd tx wasm store artifacts/simple_nft-aarch64.wasm --from wallet $TXFLAG -y --output json -b block)
 echo $RES | jq .
 ```
-**Output**
+**output**
 ```json
 {
   "height": "614976",
   "txhash": "F8503588FCBC18F4EF22A3B52D2C3E0A15ED4A839AF92E5934F8A2EF518DA5E8",
   "data": "0A250A1E2F636F736D7761736D2E7761736D2E76312E4D736753746F7265436F6465120308B302",
   "raw_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"/cosmwasm.wasm.v1.MsgStoreCode\"},{\"key\":\"module\",\"value\":\"wasm\"},{\"key\":\"sender\",\"value\":\"wasm1g9urk8rj9news03dv7wfckcu49a6yk8z5rldwf\"}]},{\"type\":\"store_code\",\"attributes\":[{\"key\":\"code_id\",\"value\":\"307\"}]}]}]",
-  ...
+  .
+  .
+  .
 }
 ```
 
@@ -43,7 +45,7 @@ echo $RES | jq .
 CODE_ID=$(echo $RES | jq -r '.logs[0].events[-1].attributes[0].value')
 echo $CODE_ID
 ```
-**Output**(Might be something different for you)
+**output**(Might be something different for you)
 ```zsh
 307
 ```
@@ -58,7 +60,7 @@ INIT='{"name":"TestNFT","symbol":"TNFT"}'
 ```zsh
 wasmd tx wasm instantiate $CODE_ID $INIT --from wallet --label "Test simple NFT" $TXFLAG -y --no-admin
 ```
-**Output**
+**output**
 ```
 logs: []
 raw_log: '[]'
@@ -69,7 +71,7 @@ txhash: A9B8E576F4B3AD2F183AFFB7A2E1593E00594E375B9C522AC5B0710984223C2D
 CONTRACT=$(wasmd query wasm list-contract-by-code $CODE_ID $NODE --output json | jq -r '.contracts[-1]')
 echo $CONTRACT
 ```
-**Output**
+**output**
 ```
 wasm1ydfppp7qhh5m28zvwy2gk98j2hu8fs4ky3h4h0yt7rhwrymjqdlssh63sg
 ```
@@ -77,7 +79,7 @@ wasm1ydfppp7qhh5m28zvwy2gk98j2hu8fs4ky3h4h0yt7rhwrymjqdlssh63sg
 ```zsh
 wasmd query wasm contract $CONTRACT $NODE
 ```
-**Output**
+**output**
 ```zsh
 address: wasm1ydfppp7qhh5m28zvwy2gk98j2hu8fs4ky3h4h0yt7rhwrymjqdlssh63sg
 contract_info:
@@ -89,7 +91,7 @@ contract_info:
 ```zsh
 wasmd query wasm contract-state all $CONTRACT $NODE --output json | jq -r '.models[0].value' | base64 -d | jq .
 ```
-**Output**
+**output**
 ```json
 {
   "name": "TestNFT",
