@@ -146,7 +146,7 @@ raw_log: '[]'
 txhash: 79C89F6CC934C2921B284458D7B0DC33AA9EFCD2A95BB5C54C217E8EF019FA3E
 ```
 
-11. View the newly minted [token info](src/contract.rs)
+11. View the newly minted [token info](src/state.rs)
 
 ```zsh
 $ wasmd query wasm contract-state all $CONTRACT $NODE --output json | jq -r '.models[0].value' | base64 -d | jq .
