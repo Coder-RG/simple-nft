@@ -1,7 +1,7 @@
 //! Defines *InstantiateMsg*, *ExecuteMsg* and *QueryMsg*.
 
-use cosmwasm_std::{Binary, Coin};
-use cw721::{Approval, Expiration};
+use cosmwasm_std::{Addr, Binary, Coin};
+use cw721::Expiration;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -32,7 +32,7 @@ pub enum ExecuteMsg {
     /// If expiration is set, then this allowance has a time/height limit
     Approve {
         spender: String,
-        token_id: String,
+        token_id: u64,
         expires: Option<Expiration>,
     },
     /// Remove previously granted Approval
@@ -48,6 +48,14 @@ pub enum ExecuteMsg {
 
     /// Mint a new token with the details as in MintMsg.
     Mint(MintMsg),
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
+pub struct Approval {
+    /// Account that can transfer/send the token
+    pub spender: Addr,
+    /// When the Approval expires (maybe Expiration::never)
+    pub expires: Expiration,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

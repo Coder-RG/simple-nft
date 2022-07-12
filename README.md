@@ -166,7 +166,7 @@ $ wasmd query wasm contract-state all $CONTRACT $NODE --output json | jq -r '.mo
 }
 ```
 
-12. Let's mint another token
+12. Let's mint another token with a different owner
 
 ```zsh
 $ MINT='{"mint":{"token_id":2,"owner":"wasm1g9urk8rj9news03dv7wfckcu49a6yk8z5rldwf","token_uri":"None","price":[{"amount":"1000","denom":"umlg"}]}}'

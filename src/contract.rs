@@ -7,8 +7,9 @@ use cosmwasm_std::{
 };
 
 use cw2::set_contract_version;
+use cw721::Expiration;
 
-use crate::msg::AskingPriceResponse;
+use crate::msg::{Approval, AskingPriceResponse};
 // use crate::msg::{ApprovedResponse, AskingPriceResponse};
 use crate::state::{State, TokenInfo, CONFIG, TOKENS};
 use crate::{
@@ -69,7 +70,11 @@ pub fn execute(
             token_id,
         } => handle_transfer_nft(deps, env, info, recipient, token_id),
         // ExecuteMsg::SendNft { .. } => handle_send_nft(deps, env, info, msg),
-        // ExecuteMsg::Approve { .. } => handle_approve(deps, env, info, msg),
+        ExecuteMsg::Approve {
+            spender,
+            token_id,
+            expires,
+        } => handle_approve(deps, env, info, &spender, token_id, expires),
         // ExecuteMsg::ApproveAll { .. } => handle_approve_all(deps, env, info, msg),
         // ExecuteMsg::Revoke { .. } => handle_revoke(deps, env, info, msg),
         // ExecuteMsg::RevokeAll { .. } => handle_revoke_all(deps, env, info, msg),
@@ -102,6 +107,37 @@ pub fn handle_transfer_nft(
         .add_attribute("action", "TransferNFT")
         .add_attribute("from", info.sender)
         .add_attribute("to", recipient)
+        .add_attribute("token_id", token_id.to_string()))
+}
+
+pub fn handle_approve(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    spender: &str,
+    token_id: u64,
+    expires: Option<Expiration>,
+) -> Result<Response, ContractError> {
+    // Load the token with given token id
+    let mut token = query_tokens(deps.as_ref(), token_id);
+    if info.sender != token.owner {
+        return Err(ContractError::Unauthorized);
+    };
+    let appr = Approval {
+        spender: deps.api.addr_validate(spender)?,
+        expires: match expires {
+            Some(val) => val,
+            None => Expiration::Never {},
+        },
+    };
+    // Apply approval to the token
+    token.approvals = Some(appr);
+    TOKENS.save(deps.storage, token_id, &token)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "approve")
+        .add_attribute("from", info.sender)
+        .add_attribute("approved", spender)
         .add_attribute("token_id", token_id.to_string()))
 }
 

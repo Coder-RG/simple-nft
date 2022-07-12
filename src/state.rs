@@ -1,6 +1,6 @@
 //! Defines the state and tokeninfo structs
 
-use cw721::Approval;
+use crate::msg::Approval;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
