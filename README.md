@@ -30,7 +30,6 @@ This will create a *.wasm* binary file in *artifacts/* folder.
 $ RES=$(wasmd tx wasm store artifacts/simple_nft-aarch64.wasm --from wallet $TXFLAG -y --output json -b block)
 echo $RES | jq .
 ```
-**output**
 ```json
 {
   "height": "614976",
@@ -47,12 +46,13 @@ echo $RES | jq .
 $ CODE_ID=$(echo $RES | jq -r '.logs[0].events[-1].attributes[0].value')
 $ echo $CODE_ID
 ```
-**output**(Might be something different for you)
 ```zsh
 307
 ```
 
 ## Interaction on blockchain
+
+Any smart contract consists of 3 actions: Instantiate, Execute and Query. One of each has been implemented in this contract for demonstration.
 
 ### Instantiate
 4. Create the InstantiateMsg
@@ -66,7 +66,6 @@ $ INIT='{"name":"TestNFT","symbol":"TNFT"}'
 ```zsh
 $ wasmd tx wasm instantiate $CODE_ID $INIT --from wallet --label "Test simple NFT" $TXFLAG -y --no-admin
 ```
-**output**
 ```
 logs: []
 raw_log: '[]'
@@ -79,7 +78,6 @@ txhash: A9B8E576F4B3AD2F183AFFB7A2E1593E00594E375B9C522AC5B0710984223C2D
 $ CONTRACT=$(wasmd query wasm list-contract-by-code $CODE_ID $NODE --output json | jq -r '.contracts[-1]')
 $ echo $CONTRACT
 ```
-**output**
 ```
 wasm1ydfppp7qhh5m28zvwy2gk98j2hu8fs4ky3h4h0yt7rhwrymjqdlssh63sg
 ```
@@ -89,7 +87,6 @@ wasm1ydfppp7qhh5m28zvwy2gk98j2hu8fs4ky3h4h0yt7rhwrymjqdlssh63sg
 ```zsh
 $ wasmd query wasm contract $CONTRACT $NODE
 ```
-**output**
 ```zsh
 address: wasm1ydfppp7qhh5m28zvwy2gk98j2hu8fs4ky3h4h0yt7rhwrymjqdlssh63sg
 contract_info:
@@ -105,7 +102,6 @@ contract. This is to make things simpler.
 ```zsh
 $ wasmd query wasm contract-state all $CONTRACT $NODE --output json | jq -r '.models[0].value' | base64 -d | jq .
 ```
-**output**
 ```json
 {
   "name": "TestNFT",
@@ -123,7 +119,6 @@ $ wasmd query wasm contract-state all $CONTRACT $NODE --output json | jq -r '.mo
 $ MINT='{"mint":{"token_id":1,"owner":"wasm1qka2er800suxsy7y9yz9wqgt8p3ktw5ptpf28s","token_uri":"None","price":[{"amount":"1000","denom":"umlg"}]}}'
 $ echo $MINT | jq .
 ```
-**output**
 ```json
 {
   "mint": {
@@ -145,7 +140,6 @@ $ echo $MINT | jq .
 ```zsh
 $ wasmd tx wasm execute $CONTRACT "$MINT" --from wallet $TXFLAG -y
 ```
-**output**
 ```zsh
 logs: []
 raw_log: '[]'
@@ -157,7 +151,6 @@ txhash: 79C89F6CC934C2921B284458D7B0DC33AA9EFCD2A95BB5C54C217E8EF019FA3E
 ```zsh
 $ wasmd query wasm contract-state all $CONTRACT $NODE --output json | jq -r '.models[0].value' | base64 -d | jq .
 ```
-**output**
 ```json
 {
   "owner": "wasm1qka2er800suxsy7y9yz9wqgt8p3ktw5ptpf28s",
@@ -179,7 +172,6 @@ $ wasmd query wasm contract-state all $CONTRACT $NODE --output json | jq -r '.mo
 $ MINT='{"mint":{"token_id":2,"owner":"wasm1g9urk8rj9news03dv7wfckcu49a6yk8z5rldwf","token_uri":"None","price":[{"amount":"1000","denom":"umlg"}]}}'
 $ echo $MINT | jq .
 ```
-**output**
 ```json
 {
   "mint": {
@@ -201,7 +193,6 @@ $ echo $MINT | jq .
 ```zsh
 $ wasmd tx wasm execute $CONTRACT "$MINT" --from wallet $TXFLAG -y
 ```
-**output**
 ```zsh
 gas estimate: 160602
 logs: []
@@ -213,7 +204,6 @@ txhash: 5AE13707AD8C944607FEF23B43648F983CFBE298724A3EA4966934254BABB984
 ```zsh
 $ wasmd query wasm contract-state all $CONTRACT $NODE --output json | jq -r '.models[1].value' | base64 -d | jq .
 ```
-**output**
 ```json
 {
   "owner": "wasm1g9urk8rj9news03dv7wfckcu49a6yk8z5rldwf",
@@ -235,7 +225,6 @@ $ wasmd query wasm contract-state all $CONTRACT $NODE --output json | jq -r '.mo
 $ EXECUTE='{"transfer_nft":{"recipient":"wasm1qka2er800suxsy7y9yz9wqgt8p3ktw5ptpf28s","token_id":2}}'
 $ echo $EXECUTE | jq .
 ```
-**output**
 ```json
 {
   "transfer_nft": {
@@ -250,7 +239,6 @@ $ echo $EXECUTE | jq .
 ```zsh
 $ wasmd tx wasm execute $CONTRACT "$EXECUTE" --from wallet $TXFLAG -y --output json | jq .
 ```
-**output**
 ```json
 {
   "txhash": "5CD670F4EF8A836E8AFDC28E84CFCEC4046174AA63C6899409856EF9C756B500",
@@ -263,7 +251,6 @@ $ wasmd tx wasm execute $CONTRACT "$EXECUTE" --from wallet $TXFLAG -y --output j
 ```zsh
 $ wasmd query wasm contract-state all $CONTRACT $NODE --output json | jq -r '.models[0].value' | base64 -d | jq .
 ```
-**output**
 ```json
 {
   "owner": "wasm1qka2er800suxsy7y9yz9wqgt8p3ktw5ptpf28s",
@@ -282,7 +269,6 @@ $ wasmd query wasm contract-state all $CONTRACT $NODE --output json | jq -r '.mo
 ```zsh
 $ wasmd query wasm contract-state all $CONTRACT $NODE --output json | jq -r '.models[1].value' | base64 -d | jq .
 ```
-**output**
 ```json
 {
   "owner": "wasm1qka2er800suxsy7y9yz9wqgt8p3ktw5ptpf28s",
@@ -314,7 +300,6 @@ $ QUERY='{"asking_price":{"token_id":1}}'
 ```zsh
 $ wasmd query wasm contract-state smart $CONTRACT "$QUERY" $NODE --output json | jq .
 ```
-**output**
 ```json
 {
   "data": {
