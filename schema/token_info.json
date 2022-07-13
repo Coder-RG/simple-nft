@@ -57,7 +57,7 @@
       "type": "object",
       "required": [
         "expires",
-        "spender"
+        "operator"
       ],
       "properties": {
         "expires": {
@@ -68,7 +68,7 @@
             }
           ]
         },
-        "spender": {
+        "operator": {
           "description": "Account that can transfer/send the token",
           "allOf": [
             {

@@ -71,10 +71,10 @@ pub fn execute(
         } => handle_transfer_nft(deps, env, info, recipient, token_id),
         // ExecuteMsg::SendNft { .. } => handle_send_nft(deps, env, info, msg),
         ExecuteMsg::Approve {
-            spender,
+            operator,
             token_id,
             expires,
-        } => handle_approve(deps, env, info, &spender, token_id, expires),
+        } => handle_approve(deps, env, info, operator.as_str(), token_id, expires),
         // ExecuteMsg::ApproveAll { .. } => handle_approve_all(deps, env, info, msg),
         // ExecuteMsg::Revoke { .. } => handle_revoke(deps, env, info, msg),
         // ExecuteMsg::RevokeAll { .. } => handle_revoke_all(deps, env, info, msg),
@@ -95,7 +95,13 @@ pub fn handle_transfer_nft(
     let mut requested_token = TOKENS.load(deps.storage, token_id)?;
 
     if requested_token.owner != info.sender {
-        return Err(ContractError::Unauthorized);
+        if let Some(val) = requested_token.approvals {
+            if info.sender != val.operator {
+                return Err(ContractError::Unauthorized);
+            }
+        } else {
+            return Err(ContractError::Unauthorized);
+        }
     }
 
     requested_token.owner = deps.api.addr_validate(&recipient)?;
@@ -114,7 +120,7 @@ pub fn handle_approve(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    spender: &str,
+    operator: &str,
     token_id: u64,
     expires: Option<Expiration>,
 ) -> Result<Response, ContractError> {
@@ -124,7 +130,7 @@ pub fn handle_approve(
         return Err(ContractError::Unauthorized);
     };
     let appr = Approval {
-        spender: deps.api.addr_validate(spender)?,
+        operator: deps.api.addr_validate(operator)?,
         expires: match expires {
             Some(val) => val,
             None => Expiration::Never {},
@@ -137,7 +143,7 @@ pub fn handle_approve(
     Ok(Response::new()
         .add_attribute("action", "approve")
         .add_attribute("from", info.sender)
-        .add_attribute("approved", spender)
+        .add_attribute("approved", operator)
         .add_attribute("token_id", token_id.to_string()))
 }
 
@@ -173,11 +179,11 @@ pub fn handle_mint(
         token_id: num_tokens,
     };
     // Save the new token to storage
-    TOKENS.save(deps.storage, num_tokens, &token).unwrap();
+    TOKENS.save(deps.storage, num_tokens, &token)?;
 
-    // Increase the number of tokens issues in state
+    // Increase the number of tokens issued in state
     config.num_tokens = num_tokens;
-    CONFIG.save(deps.storage, &config).unwrap();
+    CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::new()
         .add_attribute("action", "mint")
@@ -224,6 +230,15 @@ mod tests {
         InstantiateMsg { name, symbol }
     }
 
+    fn mint_msg(owner: String) -> MintMsg {
+        MintMsg {
+            token_id: 1,
+            owner,
+            token_uri: None,
+            price: coins(1000, &DENOM.to_string()),
+        }
+    }
+
     #[test]
     fn proper_initialization() {
         // Create mock dependencies and environment
@@ -262,6 +277,32 @@ mod tests {
             ContractError::CustomError { .. } => {}
             e => panic!("{:?}", e),
         }
+    }
+
+    #[test]
+    fn approval() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info("creator", &coins(0, &DENOM.to_string()));
+
+        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
+        let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+        assert_eq!(0, res.messages.len());
+
+        let mint_msg = mint_msg("owner1".to_string());
+        let _res = handle_mint(deps.as_mut(), env.clone(), info.clone(), mint_msg).unwrap();
+
+        let approve_msg = ExecuteMsg::Approve {
+            operator: "opearator".to_string(),
+            token_id: 1u64,
+            expires: None,
+        };
+
+        let info = mock_info("owner1", &coins(0, &DENOM.to_string()));
+        let res = execute(deps.as_mut(), env.clone(), info.clone(), approve_msg).unwrap();
+
+        assert_eq!(res.messages.len(), 0);
+        assert_eq!(res.attributes.len(), 4);
     }
 
     #[test]
@@ -307,7 +348,7 @@ mod tests {
     }
 
     #[test]
-    fn transfer_nft() {
+    fn transfer_nft_by_owner() {
         let mut deps = mock_dependencies();
         let env = mock_env();
 
@@ -328,6 +369,47 @@ mod tests {
         assert_eq!(4, res.attributes.len());
 
         let info = mock_info("creator", &coins(0u128, &DENOM.to_string()));
+        let msg = ExecuteMsg::TransferNft {
+            recipient: String::from("recipient"),
+            token_id: 1,
+        };
+        let res: Response = execute(deps.as_mut(), env, info, msg).unwrap();
+        assert_eq!(0, res.messages.len());
+        assert_eq!(4, res.attributes.len());
+    }
+
+    #[test]
+    fn transfer_nft_by_operator() {
+        // Setup the necessary environment
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+
+        let info = mock_info("minter", &coins(0u128, &DENOM.to_string()));
+        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
+        let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+        let mint_msg = MintMsg {
+            token_id: 0,
+            owner: String::from("creator"),
+            token_uri: None,
+            price: coins(1000, DENOM.to_string()),
+        };
+
+        let msg = ExecuteMsg::Mint(mint_msg);
+        let res: Response = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+        assert_eq!(0, res.messages.len());
+        assert_eq!(4, res.attributes.len());
+
+        // Add approval to the token
+        let mut token = query_tokens(deps.as_ref(), 1u64);
+        token.approvals = Some(Approval {
+            operator: Addr::unchecked("operator"),
+            expires: Expiration::Never {},
+        });
+        TOKENS.save(&mut deps.storage, 1u64, &token).unwrap();
+
+        // *operator* should not be capable of transferring the token
+        let info = mock_info("operator", &coins(0u128, &DENOM.to_string()));
         let msg = ExecuteMsg::TransferNft {
             recipient: String::from("recipient"),
             token_id: 1,

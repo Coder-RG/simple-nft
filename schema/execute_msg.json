@@ -68,7 +68,7 @@
         "approve": {
           "type": "object",
           "required": [
-            "spender",
+            "operator",
             "token_id"
           ],
           "properties": {
@@ -82,7 +82,7 @@
                 }
               ]
             },
-            "spender": {
+            "operator": {
               "type": "string"
             },
             "token_id": {

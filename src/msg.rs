@@ -31,7 +31,7 @@ pub enum ExecuteMsg {
     /// Allows operator to transfer / send the token from the owner's account.
     /// If expiration is set, then this allowance has a time/height limit
     Approve {
-        spender: String,
+        operator: String,
         token_id: u64,
         expires: Option<Expiration>,
     },
@@ -53,7 +53,7 @@ pub enum ExecuteMsg {
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
 pub struct Approval {
     /// Account that can transfer/send the token
-    pub spender: Addr,
+    pub operator: Addr,
     /// When the Approval expires (maybe Expiration::never)
     pub expires: Expiration,
 }
