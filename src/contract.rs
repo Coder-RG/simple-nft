@@ -76,7 +76,9 @@ pub fn execute(
             expires,
         } => handle_approve(deps, env, info, operator.as_str(), token_id, expires),
         // ExecuteMsg::ApproveAll { .. } => handle_approve_all(deps, env, info, msg),
-        // ExecuteMsg::Revoke { .. } => handle_revoke(deps, env, info, msg),
+        ExecuteMsg::Revoke { operator, token_id } => {
+            handle_revoke(deps, env, info, operator, token_id)
+        }
         // ExecuteMsg::RevokeAll { .. } => handle_revoke_all(deps, env, info, msg),
         ExecuteMsg::Mint(msg) => handle_mint(deps, env, info, msg),
         _ => Err(ContractError::CustomError {
@@ -94,6 +96,7 @@ pub fn handle_transfer_nft(
 ) -> Result<Response, ContractError> {
     let mut requested_token = TOKENS.load(deps.storage, token_id)?;
 
+    // if sender is not the onwer or an approved operator, return Err
     if requested_token.owner != info.sender {
         if let Some(val) = requested_token.approvals {
             if info.sender != val.operator {
@@ -144,6 +147,29 @@ pub fn handle_approve(
         .add_attribute("action", "approve")
         .add_attribute("from", info.sender)
         .add_attribute("approved", operator)
+        .add_attribute("token_id", token_id.to_string()))
+}
+
+fn handle_revoke(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    operator: String,
+    token_id: u64,
+) -> Result<Response, ContractError> {
+    let mut token = query_tokens(deps.as_ref(), token_id);
+    if info.sender != token.owner {
+        return Err(ContractError::Unauthorized);
+    } else if let None = token.approvals {
+        return Err(ContractError::ApprovalNotFound { operator });
+    }
+    let revoked = token.approvals.unwrap();
+    token.approvals = None;
+    TOKENS.save(deps.storage, token_id, &token)?;
+    Ok(Response::new()
+        .add_attribute("action", "revoke")
+        .add_attribute("from", info.sender)
+        .add_attribute("revoked", revoked.operator)
         .add_attribute("token_id", token_id.to_string()))
 }
 
@@ -293,7 +319,7 @@ mod tests {
         let _res = handle_mint(deps.as_mut(), env.clone(), info.clone(), mint_msg).unwrap();
 
         let approve_msg = ExecuteMsg::Approve {
-            operator: "opearator".to_string(),
+            operator: "operator".to_string(),
             token_id: 1u64,
             expires: None,
         };
@@ -303,6 +329,54 @@ mod tests {
 
         assert_eq!(res.messages.len(), 0);
         assert_eq!(res.attributes.len(), 4);
+
+        let token = query_tokens(deps.as_ref(), 1u64);
+
+        assert_eq!(
+            token.approvals.unwrap().operator,
+            Addr::unchecked("operator")
+        );
+    }
+
+    #[test]
+    fn revoke() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info("creator", &coins(0, &DENOM.to_string()));
+
+        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
+        let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+        assert_eq!(0, res.messages.len());
+
+        // Mint a new token
+        let mint_msg = mint_msg("owner1".to_string());
+        let _res = handle_mint(deps.as_mut(), env.clone(), info.clone(), mint_msg).unwrap();
+        let approve_msg = ExecuteMsg::Approve {
+            operator: "operator".to_string(),
+            token_id: 1u64,
+            expires: None,
+        };
+        let info = mock_info("owner1", &coins(0, &DENOM.to_string()));
+        execute(deps.as_mut(), env.clone(), info.clone(), approve_msg).unwrap();
+
+        let token = query_tokens(deps.as_ref(), 1u64);
+        assert_eq!(
+            token.approvals.unwrap().operator,
+            Addr::unchecked("operator")
+        );
+
+        // Revoke approval
+        let revoke_msg = ExecuteMsg::Revoke {
+            operator: "operator".to_string(),
+            token_id: 1u64,
+        };
+
+        let res = execute(deps.as_mut(), env.clone(), info.clone(), revoke_msg).unwrap();
+        assert_eq!(res.messages.len(), 0);
+        assert_eq!(res.attributes.len(), 4);
+
+        let token = query_tokens(deps.as_ref(), 1u64);
+        assert_eq!(token.approvals, None);
     }
 
     #[test]
