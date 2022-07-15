@@ -105,15 +105,17 @@
         "revoke": {
           "type": "object",
           "required": [
-            "spender",
+            "operator",
             "token_id"
           ],
           "properties": {
-            "spender": {
+            "operator": {
               "type": "string"
             },
             "token_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             }
           }
         }
@@ -256,8 +258,7 @@
       "type": "object",
       "required": [
         "owner",
-        "price",
-        "token_id"
+        "price"
       ],
       "properties": {
         "owner": {
@@ -270,12 +271,6 @@
           "items": {
             "$ref": "#/definitions/Coin"
           }
-        },
-        "token_id": {
-          "description": "Unique ID of the NFT",
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0.0
         },
         "token_uri": {
           "description": "Universal resource identifier for this NFT Should point to a JSON file that conforms to the ERC721 Metadata JSON Schema",

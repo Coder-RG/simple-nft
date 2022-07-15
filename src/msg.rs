@@ -45,7 +45,6 @@ pub enum ExecuteMsg {
     },
     /// Remove previously granted ApproveAll permission
     RevokeAll { operator: String },
-
     /// Mint a new token with the details as in MintMsg.
     Mint(MintMsg),
 }
@@ -60,8 +59,8 @@ pub struct Approval {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct MintMsg {
-    /// Unique ID of the NFT
-    pub token_id: u32,
+    // /// Unique ID of the NFT
+    // pub token_id: u64,
     /// The owner of the newly minter NFT
     pub owner: String,
     /// Universal resource identifier for this NFT
@@ -79,19 +78,16 @@ pub enum QueryMsg {
     AskingPrice {
         token_id: u64,
     },
-
     // Owner of the token
     OwnerOf {
-        token_id: String,
+        token_id: u64,
         include_expired: Option<bool>,
     },
-
     // Return the operator, who has approval for all tokens of the given owner
     Approved {
         owner: String,
         operator: String,
     },
-
     // Return all operators with access to all of the given owner's tokens
     ApprovedForAll {
         owner: String,
@@ -99,25 +95,20 @@ pub enum QueryMsg {
         start_after: Option<String>,
         limit: Option<u32>,
     },
-
     // Number of tokens issued thus far
     NumTokens {},
-
     // Return the contract info.
     // Part of Metadata Extension
     ContractInfo {},
-
     // Return NFT info.
     // Part of Metadata Extension
     NftInfo {},
-
     // Return NFT info and OwnerOf response.
     // Part of Metadata Extension
     AllNftInfo {
         token_id: String,
         include_expired: Option<bool>,
     },
-
     // Return tokens owned by given owner.
     // Part of Enumerable Extension
     Tokens {
@@ -125,7 +116,6 @@ pub enum QueryMsg {
         start_after: Option<bool>,
         limit: Option<u32>,
     },
-
     // Return all tokens controlled by contract.
     // Part of Enumerable Extension
     AllTokens {
@@ -142,7 +132,7 @@ pub struct AskingPriceResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct OwnerOfResponse {
     pub owner: String,
-    pub approvals: Vec<Approval>,
+    pub approvals: Option<Approval>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -150,14 +140,14 @@ pub struct ApprovedResponse {
     pub approval: Approval,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct ApprovedForAllResponse {
-    pub approval: Vec<Approval>,
-}
+// #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+// pub struct ApprovedForAllResponse {
+//     pub approval: Vec<Approval>,
+// }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct NumTokensResponse {
-    pub tokens: u32,
+    pub tokens: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -167,15 +157,14 @@ pub struct ContractInfoResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct NftInfoResponse<T> {
+pub struct NftInfoResponse {
     pub token_uri: String,
-    pub extension: T,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct AllNftInfoResponse<T> {
+pub struct AllNftInfoResponse {
     pub access: OwnerOfResponse,
-    pub info: NftInfoResponse<T>,
+    pub info: NftInfoResponse,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

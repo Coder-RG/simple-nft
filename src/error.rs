@@ -20,6 +20,9 @@ pub enum ContractError {
     #[error("Approval not found for: {operator}")]
     ApprovalNotFound { operator: String },
 
+    #[error("token_id: {token_id} does not exist")]
+    InvalidToken { token_id: u64 },
+
     #[error("Invalid amount. Expected {val:?} received {funds:?}")]
     InvalidAmount { val: Coin, funds: Coin },
 
