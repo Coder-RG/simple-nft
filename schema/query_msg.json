@@ -147,7 +147,17 @@
       ],
       "properties": {
         "nft_info": {
-          "type": "object"
+          "type": "object",
+          "required": [
+            "token_id"
+          ],
+          "properties": {
+            "token_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
         }
       },
       "additionalProperties": false

@@ -9,7 +9,7 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw721::Expiration;
 
-use crate::msg::{AskingPriceResponse, NumTokensResponse, OwnerOfResponse};
+use crate::msg::{AskingPriceResponse, NftInfoResponse, NumTokensResponse, OwnerOfResponse};
 // use crate::msg::{ApprovedResponse, AskingPriceResponse};
 use crate::state::{State, TokenInfo, CONFIG, TOKENS};
 use crate::{
@@ -229,6 +229,8 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         } => query_owner_of(deps, env, token_id, include_expired),
 
         QueryMsg::NumTokens {} => query_num_tokens(deps, env),
+
+        QueryMsg::NftInfo { token_id } => query_nft_info(deps, env, token_id),
         _ => Err(StdError::NotFound {
             kind: String::from("Not Implemented"),
         }),
@@ -275,12 +277,32 @@ fn query_num_tokens(deps: Deps, _env: Env) -> StdResult<Binary> {
     })
 }
 
+fn query_nft_info(deps: Deps, _env: Env, token_id: u64) -> StdResult<Binary> {
+    let token = query_tokens(deps, token_id);
+    let res = NftInfoResponse {
+        token_uri: token.token_uri.unwrap_or_else(|| "None".to_string()),
+    };
+    to_binary(&res)
+}
+
 pub fn query_config(deps: Deps) -> State {
-    CONFIG.load(deps.storage).unwrap()
+    CONFIG
+        .load(deps.storage)
+        .expect("Unable to load internal state")
+    // match res {
+    //     Ok(state) => state,
+    //     Err(e) => panic!("{:?}", e),
+    // }
 }
 
 pub fn query_tokens(deps: Deps, token_id: u64) -> TokenInfo {
-    TOKENS.load(deps.storage, token_id).unwrap()
+    TOKENS
+        .load(deps.storage, token_id)
+        .unwrap_or_else(|_| panic!("Unable to load token with token_id: {}", token_id))
+    // match res {
+    //     Ok(token) => token,
+    //     Err(e) => panic!("{:?}", e),
+    // }
 }
 
 #[cfg(test)]

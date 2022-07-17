@@ -102,7 +102,9 @@ pub enum QueryMsg {
     ContractInfo {},
     // Return NFT info.
     // Part of Metadata Extension
-    NftInfo {},
+    NftInfo {
+        token_id: u64,
+    },
     // Return NFT info and OwnerOf response.
     // Part of Metadata Extension
     AllNftInfo {
