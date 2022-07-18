@@ -2,18 +2,15 @@
 //! These actions are performed using *wasmd*.
 
 // #[cfg(not(feature = "library"))]
-use cosmwasm_std::{
-    entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
-};
+use cosmwasm_std::{entry_point, DepsMut, Env, MessageInfo, Response};
 
 use cw2::set_contract_version;
 use cw721::Expiration;
 
-use crate::msg::{AskingPriceResponse, NftInfoResponse, NumTokensResponse, OwnerOfResponse};
-// use crate::msg::{ApprovedResponse, AskingPriceResponse};
+use crate::query::{query_config, query_tokens};
 use crate::state::{State, TokenInfo, CONFIG, TOKENS};
 use crate::{
-    msg::{Approval, ExecuteMsg, InstantiateMsg, MintMsg, QueryMsg},
+    msg::{Approval, ExecuteMsg, InstantiateMsg, MintMsg},
     ContractError,
 };
 
@@ -69,18 +66,23 @@ pub fn execute(
             recipient,
             token_id,
         } => handle_transfer_nft(deps, env, info, recipient, token_id),
+
         // ExecuteMsg::SendNft { .. } => handle_send_nft(deps, env, info, msg),
         ExecuteMsg::Approve {
             operator,
             token_id,
             expires,
         } => handle_approve(deps, env, info, operator.as_str(), token_id, expires),
+
         // ExecuteMsg::ApproveAll { .. } => handle_approve_all(deps, env, info, msg),
         ExecuteMsg::Revoke { operator, token_id } => {
             handle_revoke(deps, env, info, operator, token_id)
         }
+
         // ExecuteMsg::RevokeAll { .. } => handle_revoke_all(deps, env, info, msg),
         ExecuteMsg::Mint(msg) => handle_mint(deps, env, info, msg),
+
+        // Other forms not yet implemented throw an error
         _ => Err(ContractError::CustomError {
             val: String::from("Not implemented"),
         }),
@@ -113,7 +115,7 @@ pub fn handle_transfer_nft(
     TOKENS.save(deps.storage, token_id, &requested_token)?;
 
     Ok(Response::new()
-        .add_attribute("action", "TransferNFT")
+        .add_attribute("action", "transfer_nft")
         .add_attribute("from", info.sender)
         .add_attribute("to", recipient)
         .add_attribute("token_id", token_id.to_string()))
@@ -150,7 +152,7 @@ pub fn handle_approve(
         .add_attribute("token_id", token_id.to_string()))
 }
 
-fn handle_revoke(
+pub fn handle_revoke(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
@@ -200,7 +202,7 @@ pub fn handle_mint(
     let token = TokenInfo {
         owner: deps.api.addr_validate(&msg.owner)?,
         approvals: None,
-        token_uri: None,
+        token_uri: msg.token_uri,
         base_price: msg.price,
         token_id: num_tokens,
     };
@@ -218,98 +220,11 @@ pub fn handle_mint(
         .add_attribute("token_id", num_tokens.to_string()))
 }
 
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
-    match msg {
-        QueryMsg::AskingPrice { token_id } => query_asking_price(deps, env, token_id),
-
-        QueryMsg::OwnerOf {
-            token_id,
-            include_expired,
-        } => query_owner_of(deps, env, token_id, include_expired),
-
-        QueryMsg::NumTokens {} => query_num_tokens(deps, env),
-
-        QueryMsg::NftInfo { token_id } => query_nft_info(deps, env, token_id),
-        _ => Err(StdError::NotFound {
-            kind: String::from("Not Implemented"),
-        }),
-    }
-}
-
-pub fn query_asking_price(deps: Deps, _env: Env, token_id: u64) -> StdResult<Binary> {
-    let token_info = query_tokens(deps, token_id);
-    let response = AskingPriceResponse {
-        price: token_info.base_price[0].clone(),
-    };
-    to_binary(&response)
-}
-
-fn query_owner_of(
-    deps: Deps,
-    env: Env,
-    token_id: u64,
-    include_expired: Option<bool>,
-) -> StdResult<Binary> {
-    let token = query_tokens(deps, token_id);
-
-    let result = OwnerOfResponse {
-        owner: token.owner.into_string(),
-        approvals: match token.approvals {
-            Some(val) => {
-                if !val.expires.is_expired(&env.block) || include_expired.unwrap_or(false) {
-                    Some(val)
-                } else {
-                    None
-                }
-            }
-            None => None,
-        },
-    };
-
-    to_binary(&result)
-}
-
-fn query_num_tokens(deps: Deps, _env: Env) -> StdResult<Binary> {
-    let config = query_config(deps);
-    to_binary(&NumTokensResponse {
-        tokens: config.num_tokens,
-    })
-}
-
-fn query_nft_info(deps: Deps, _env: Env, token_id: u64) -> StdResult<Binary> {
-    let token = query_tokens(deps, token_id);
-    let res = NftInfoResponse {
-        token_uri: token.token_uri.unwrap_or_else(|| "None".to_string()),
-    };
-    to_binary(&res)
-}
-
-pub fn query_config(deps: Deps) -> State {
-    CONFIG
-        .load(deps.storage)
-        .expect("Unable to load internal state")
-    // match res {
-    //     Ok(state) => state,
-    //     Err(e) => panic!("{:?}", e),
-    // }
-}
-
-pub fn query_tokens(deps: Deps, token_id: u64) -> TokenInfo {
-    TOKENS
-        .load(deps.storage, token_id)
-        .unwrap_or_else(|_| panic!("Unable to load token with token_id: {}", token_id))
-    // match res {
-    //     Ok(token) => token,
-    //     Err(e) => panic!("{:?}", e),
-    // }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins, from_binary, Addr, Coin, Uint128};
+    use cosmwasm_std::{coins, Addr};
 
     const DENOM: &str = "ubit";
 
@@ -457,10 +372,13 @@ mod tests {
 
         let mint_msg = mint_msg("creator".to_string());
 
-        let msg = ExecuteMsg::Mint(mint_msg);
-        let res: Response = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+        // let msg = ExecuteMsg::Mint(mint_msg);
+        // let res: Response = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+        let res = handle_mint(deps.as_mut(), env.clone(), info.clone(), mint_msg).unwrap();
         assert_eq!(0, res.messages.len());
         assert_eq!(4, res.attributes.len());
+        assert_eq!(res.attributes[3].key, "token_id");
+        assert_eq!(res.attributes[3].value, "1");
 
         let stored_state = query_config(deps.as_ref());
         assert_eq!(stored_state.name, "TestNFT");
@@ -536,54 +454,5 @@ mod tests {
         let res: Response = execute(deps.as_mut(), env, info, msg).unwrap();
         assert_eq!(0, res.messages.len());
         assert_eq!(4, res.attributes.len());
-    }
-
-    #[test]
-    fn asking_price() {
-        let mut deps = mock_dependencies();
-        let env = mock_env();
-
-        let info = mock_info("minter", &coins(0u128, &DENOM.to_string()));
-        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
-        let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-        assert_eq!(res.messages.len(), 0);
-
-        let mint_msg = mint_msg("creator".to_string());
-
-        let msg = ExecuteMsg::Mint(mint_msg);
-        let res: Response = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-        assert_eq!(0, res.messages.len());
-        assert_eq!(4, res.attributes.len());
-
-        let query_msg = QueryMsg::AskingPrice { token_id: 1 };
-        let res = query(deps.as_ref(), env, query_msg).unwrap();
-        let res: AskingPriceResponse = from_binary(&res).unwrap();
-        assert_eq!(
-            res.price,
-            Coin {
-                amount: Uint128::from(1000u64),
-                denom: DENOM.to_string()
-            }
-        );
-    }
-
-    #[test]
-    fn owner_of() {
-        let mut deps = mock_dependencies();
-        let env = mock_env();
-
-        let info = mock_info("minter", &coins(0u128, &DENOM.to_string()));
-        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
-        let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-        assert_eq!(res.messages.len(), 0);
-
-        let mint_msg = mint_msg("creator".to_string());
-        let msg = ExecuteMsg::Mint(mint_msg);
-        execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-
-        let res = query_owner_of(deps.as_ref(), env, 1u64, None).unwrap();
-        let res: OwnerOfResponse = from_binary(&res).unwrap();
-        assert_eq!(res.owner, "creator");
-        assert_eq!(res.approvals, None);
     }
 }
