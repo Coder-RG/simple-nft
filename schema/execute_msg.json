@@ -51,7 +51,9 @@
               "$ref": "#/definitions/Binary"
             },
             "token_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             }
           }
         }

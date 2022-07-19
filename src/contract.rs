@@ -2,10 +2,10 @@
 //! These actions are performed using *wasmd*.
 
 // #[cfg(not(feature = "library"))]
-use cosmwasm_std::{entry_point, DepsMut, Env, MessageInfo, Response};
+use cosmwasm_std::{entry_point, Binary, DepsMut, Env, MessageInfo, Response};
 
 use cw2::set_contract_version;
-use cw721::Expiration;
+use cw721::{Cw721ReceiveMsg, Expiration};
 
 use crate::query::{query_config, query_tokens};
 use crate::state::{State, TokenInfo, CONFIG, TOKENS};
@@ -38,7 +38,7 @@ pub fn instantiate(
             val: String::from("length of `symbol` should be greater than 1"),
         });
     }
-    // sender will the minter for the time being
+    // sender will be the minter for the time being
     let minter = deps.api.addr_validate(info.sender.as_str())?;
 
     // Configure the state for storing
@@ -48,7 +48,7 @@ pub fn instantiate(
         minter,
         num_tokens: 0u64,
     };
-    // Store the configured state
+    // Store
     CONFIG.save(deps.storage, &config)?;
     // Return an Ok() response as everything went well
     Ok(Response::default())
@@ -67,7 +67,12 @@ pub fn execute(
             token_id,
         } => handle_transfer_nft(deps, env, info, recipient, token_id),
 
-        // ExecuteMsg::SendNft { .. } => handle_send_nft(deps, env, info, msg),
+        ExecuteMsg::SendNft {
+            contract,
+            token_id,
+            msg,
+        } => handle_send_nft(deps, env, info, contract, token_id, msg),
+
         ExecuteMsg::Approve {
             operator,
             token_id,
@@ -118,6 +123,30 @@ pub fn handle_transfer_nft(
         .add_attribute("action", "transfer_nft")
         .add_attribute("from", info.sender)
         .add_attribute("to", recipient)
+        .add_attribute("token_id", token_id.to_string()))
+}
+
+fn handle_send_nft(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    contract: String,
+    token_id: u64,
+    msg: Binary,
+) -> Result<Response, ContractError> {
+    handle_transfer_nft(deps, env, info.clone(), contract.clone(), token_id)?;
+
+    let msg = Cw721ReceiveMsg {
+        sender: info.sender.to_string(),
+        token_id: token_id.to_string(),
+        msg,
+    };
+
+    Ok(Response::new()
+        .add_message(msg.into_cosmos_msg(contract.clone())?)
+        .add_attribute("action", "send_nft")
+        .add_attribute("from", info.sender)
+        .add_attribute("to", contract)
         .add_attribute("token_id", token_id.to_string()))
 }
 
