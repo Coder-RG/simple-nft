@@ -25,7 +25,7 @@ pub enum ExecuteMsg {
     /// on the receiving contract.
     SendNft {
         contract: String,
-        token_id: String,
+        token_id: u64,
         msg: Binary,
     },
     /// Allows operator to transfer / send the token from the owner's account.

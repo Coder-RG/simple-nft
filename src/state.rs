@@ -1,6 +1,7 @@
 //! Defines the state and tokeninfo structs
 
 use crate::msg::Approval;
+use cw721::Expiration;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +28,12 @@ pub struct TokenInfo {
     pub token_uri: Option<String>,
     /// Unique token_id
     pub token_id: u64,
+}
+
+pub struct Storage<'a> {
+    pub operator: Map<'a, (Addr, Addr), Expiration>,
+    pub config: Item<'a, State>,
+    pub tokens: Map<'a, u64, TokenInfo>,
 }
 
 pub const CONFIG: Item<State> = Item::new("config");
