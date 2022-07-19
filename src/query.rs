@@ -1,5 +1,4 @@
-use cosmwasm_std::{entry_point, Env};
-use cosmwasm_std::{to_binary, Binary, Deps, StdError, StdResult};
+use cosmwasm_std::{entry_point, to_binary, Binary, Deps, Env, StdError, StdResult};
 
 use crate::msg::{
     AskingPriceResponse, NftInfoResponse, NumTokensResponse, OwnerOfResponse, QueryMsg,
@@ -28,9 +27,9 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 pub fn query_asking_price(deps: Deps, _env: Env, token_id: u64) -> StdResult<Binary> {
-    let token_info = query_tokens(deps, token_id);
+    let token_info = query_tokens(deps, token_id)?;
     let response = AskingPriceResponse {
-        price: token_info.base_price[0].clone(),
+        price: token_info.base_price,
     };
     to_binary(&response)
 }
@@ -41,7 +40,7 @@ fn query_owner_of(
     token_id: u64,
     include_expired: Option<bool>,
 ) -> StdResult<Binary> {
-    let token = query_tokens(deps, token_id);
+    let token = query_tokens(deps, token_id)?;
 
     let result = OwnerOfResponse {
         owner: token.owner.into_string(),
@@ -61,38 +60,38 @@ fn query_owner_of(
 }
 
 fn query_num_tokens(deps: Deps, _env: Env) -> StdResult<Binary> {
-    let config = query_config(deps);
+    let config = query_config(deps)?;
     to_binary(&NumTokensResponse {
         tokens: config.num_tokens,
     })
 }
 
 fn query_nft_info(deps: Deps, _env: Env, token_id: u64) -> StdResult<Binary> {
-    let token = query_tokens(deps, token_id);
+    let token = query_tokens(deps, token_id)?;
     let res = NftInfoResponse {
         token_uri: token.token_uri.unwrap_or_else(|| "None".to_string()),
     };
     to_binary(&res)
 }
 
-pub fn query_config(deps: Deps) -> State {
-    CONFIG
-        .load(deps.storage)
-        .expect("Unable to load internal state")
-    // match res {
-    //     Ok(state) => state,
-    //     Err(e) => panic!("{:?}", e),
-    // }
+pub fn query_config(deps: Deps) -> StdResult<State> {
+    let res = CONFIG.may_load(deps.storage)?;
+    match res {
+        Some(val) => Ok(val),
+        None => Err(StdError::GenericErr {
+            msg: String::from("Unable to load internal state"),
+        }),
+    }
 }
 
-pub fn query_tokens(deps: Deps, token_id: u64) -> TokenInfo {
-    TOKENS
-        .load(deps.storage, token_id)
-        .unwrap_or_else(|_| panic!("Unable to load token with token_id: {}", token_id))
-    // match res {
-    //     Ok(token) => token,
-    //     Err(e) => panic!("{:?}", e),
-    // }
+pub fn query_tokens(deps: Deps, token_id: u64) -> StdResult<TokenInfo> {
+    let res = TOKENS.may_load(deps.storage, token_id)?;
+    match res {
+        Some(val) => Ok(val),
+        None => Err(StdError::NotFound {
+            kind: format!("Unable to load token with token_id: {}", token_id),
+        }),
+    }
 }
 
 #[cfg(test)]
@@ -140,10 +139,10 @@ mod tests {
         let res: AskingPriceResponse = from_binary(&res).unwrap();
         assert_eq!(
             res.price,
-            Coin {
+            vec![Coin {
                 amount: Uint128::from(1000u64),
                 denom: DENOM.to_string()
-            }
+            }]
         );
     }
 

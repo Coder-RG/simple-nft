@@ -159,7 +159,7 @@ pub fn handle_approve(
     expires: Option<Expiration>,
 ) -> Result<Response, ContractError> {
     // Load the token with given token id
-    let mut token = query_tokens(deps.as_ref(), token_id);
+    let mut token = query_tokens(deps.as_ref(), token_id)?;
     if info.sender != token.owner {
         return Err(ContractError::Unauthorized);
     };
@@ -188,7 +188,7 @@ pub fn handle_revoke(
     operator: String,
     token_id: u64,
 ) -> Result<Response, ContractError> {
-    let mut token = query_tokens(deps.as_ref(), token_id);
+    let mut token = query_tokens(deps.as_ref(), token_id)?;
     if info.sender != token.owner {
         return Err(ContractError::Unauthorized);
     } else if token.approvals.is_none() {
@@ -211,7 +211,7 @@ pub fn handle_mint(
     msg: MintMsg,
 ) -> Result<Response, ContractError> {
     // Load current contract state
-    let mut config = query_config(deps.as_ref());
+    let mut config = query_config(deps.as_ref())?;
 
     // sender and minter address should be same
     if info.sender != config.minter {
@@ -219,10 +219,23 @@ pub fn handle_mint(
     }
 
     // price of the new NFT cannot be zero
-    if msg.price[0].amount.is_zero() {
+    if msg.price.is_empty() {
         return Err(ContractError::CustomError {
-            val: String::from("Token price cannot be zero"),
+            val: String::from("Token price cannot be empty"),
         });
+    } else {
+        // let res: Vec<&Coin> = msg
+        //     .price
+        //     .iter()
+        //     .filter(|val| val.amount.is_zero())
+        //     .collect();
+        for val in msg.price.iter() {
+            if val.amount.is_zero() {
+                return Err(ContractError::CustomError {
+                    val: String::from("Token price cannot be zero"),
+                });
+            }
+        }
     }
 
     // Increase the current amount of tokens issued
@@ -253,7 +266,8 @@ pub fn handle_mint(
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins, Addr};
+    use cosmwasm_std::{coins, Addr, StdError};
+    use cw721::Expiration;
 
     const DENOM: &str = "ubit";
 
@@ -276,15 +290,12 @@ mod tests {
         let env = mock_env();
         let info = mock_info("creator", &coins(0, &DENOM.to_string()));
 
-        // sample InstantiateMsg
+        // Correct instantiation
         let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
-
-        // Upon currect instantiation, there will be no response; as expected.
         let res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
         assert_eq!(0, res.messages.len());
 
-        // Check if the correct values are stored.
-        let stored_state = query_config(deps.as_ref());
+        let stored_state = query_config(deps.as_ref()).unwrap();
         assert_eq!(stored_state.name, "TestNFT");
         assert_eq!(stored_state.symbol, "NFT");
         assert_eq!(stored_state.num_tokens, 0u64);
@@ -301,12 +312,83 @@ mod tests {
         }
 
         let msg = init_msg(String::from("TestNFT"), String::new());
+        let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap_err();
+
+        match res {
+            ContractError::CustomError { .. } => {}
+            e => panic!("{:?}", e),
+        }
+
+        let msg = init_msg(String::from(""), String::from(""));
         let res = instantiate(deps.as_mut(), env, info, msg).unwrap_err();
 
         match res {
             ContractError::CustomError { .. } => {}
             e => panic!("{:?}", e),
         }
+    }
+
+    #[test]
+    fn mint() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+
+        let info = mock_info("minter", &coins(0u128, &DENOM.to_string()));
+        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
+        instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+        // Successful token minting
+        let mint_msg = mint_msg("creator".to_string());
+        let res = handle_mint(deps.as_mut(), env.clone(), info.clone(), mint_msg).unwrap();
+        assert_eq!(0, res.messages.len());
+        assert_eq!(4, res.attributes.len());
+
+        let stored_token = query_tokens(deps.as_ref(), 1).unwrap();
+        assert_eq!(stored_token.owner, "creator");
+        assert_eq!(stored_token.token_id, 1);
+        assert_eq!(stored_token.base_price, coins(1000, DENOM.to_string()));
+        assert_eq!(stored_token.approvals, None);
+        assert_eq!(stored_token.token_uri, None);
+
+        // Unsuccessful token minting
+        // * owner name is empty
+        let msg = MintMsg {
+            owner: String::new(),
+            token_uri: None,
+            price: coins(1000, DENOM.to_string()),
+        };
+
+        let res = handle_mint(deps.as_mut(), env.clone(), info.clone(), msg).unwrap_err();
+        match res {
+            ContractError::Std(StdError::GenericErr { .. }) => {}
+            e => panic!("{:?}", e),
+        };
+
+        // * amount is empty i.e., price has been provided as 0Denom
+        let msg = MintMsg {
+            owner: String::from("owner"),
+            token_uri: None,
+            price: coins(0, DENOM.to_string()),
+        };
+
+        let res = handle_mint(deps.as_mut(), env.clone(), info.clone(), msg).unwrap_err();
+        match res {
+            ContractError::CustomError { .. } => {}
+            e => panic! {"{:?}", e},
+        };
+
+        // * price is empty
+        let msg = MintMsg {
+            owner: String::from("owner"),
+            token_uri: None,
+            price: vec![],
+        };
+
+        let res = handle_mint(deps.as_mut(), env.clone(), info.clone(), msg).unwrap_err();
+        match res {
+            ContractError::CustomError { .. } => {}
+            e => panic! {"{:?}", e},
+        };
     }
 
     #[test]
@@ -320,8 +402,9 @@ mod tests {
         assert_eq!(0, res.messages.len());
 
         let mint_msg = mint_msg("owner1".to_string());
-        let _res = handle_mint(deps.as_mut(), env.clone(), info.clone(), mint_msg).unwrap();
+        handle_mint(deps.as_mut(), env.clone(), info, mint_msg).unwrap();
 
+        // Successful approval request
         let approve_msg = ExecuteMsg::Approve {
             operator: "operator".to_string(),
             token_id: 1u64,
@@ -330,16 +413,39 @@ mod tests {
 
         let info = mock_info("owner1", &coins(0, &DENOM.to_string()));
         let res = execute(deps.as_mut(), env.clone(), info.clone(), approve_msg).unwrap();
-
         assert_eq!(res.messages.len(), 0);
         assert_eq!(res.attributes.len(), 4);
 
-        let token = query_tokens(deps.as_ref(), 1u64);
-
+        let token = query_tokens(deps.as_ref(), 1u64).unwrap();
         assert_eq!(
-            token.approvals.unwrap().operator,
+            token.approvals.as_ref().unwrap().operator,
             Addr::unchecked("operator")
         );
+        assert_eq!(token.approvals.unwrap().expires, Expiration::Never {});
+
+        // Unsuccessful approval request
+        let approve_msg = ExecuteMsg::Approve {
+            operator: String::new(),
+            token_id: 1u64,
+            expires: None,
+        };
+        let info = mock_info("owner1", &coins(0, &DENOM.to_string()));
+        let res = execute(deps.as_mut(), env.clone(), info.clone(), approve_msg).unwrap_err();
+        match res {
+            ContractError::Std(StdError::GenericErr { .. }) => {}
+            e => panic!("{:?}", e),
+        };
+        let approve_msg = ExecuteMsg::Approve {
+            operator: "operator".to_string(),
+            token_id: 2u64,
+            expires: None,
+        };
+        let info = mock_info("owner1", &coins(0, &DENOM.to_string()));
+        execute(deps.as_mut(), env.clone(), info.clone(), approve_msg).unwrap_err();
+        // assert_eq!(
+        //     res.to_string(),
+        //     String::from("Unable to load token with token_id: 2")
+        // );
     }
 
     #[test]
@@ -363,7 +469,7 @@ mod tests {
         let info = mock_info("owner1", &coins(0, &DENOM.to_string()));
         execute(deps.as_mut(), env.clone(), info.clone(), approve_msg).unwrap();
 
-        let token = query_tokens(deps.as_ref(), 1u64);
+        let token = query_tokens(deps.as_ref(), 1u64).unwrap();
         assert_eq!(
             token.approvals.unwrap().operator,
             Addr::unchecked("operator")
@@ -379,48 +485,8 @@ mod tests {
         assert_eq!(res.messages.len(), 0);
         assert_eq!(res.attributes.len(), 4);
 
-        let token = query_tokens(deps.as_ref(), 1u64);
+        let token = query_tokens(deps.as_ref(), 1u64).unwrap();
         assert_eq!(token.approvals, None);
-    }
-
-    #[test]
-    fn mint() {
-        let mut deps = mock_dependencies();
-        let env = mock_env();
-
-        let info = mock_info("minter", &coins(0u128, &DENOM.to_string()));
-        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
-        let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-        assert_eq!(0, res.messages.len());
-
-        let stored_state = query_config(deps.as_ref());
-        assert_eq!(stored_state.name, "TestNFT");
-        assert_eq!(stored_state.symbol, "NFT");
-        assert_eq!(stored_state.minter, Addr::unchecked("minter"));
-        assert_eq!(stored_state.num_tokens, 0);
-
-        let mint_msg = mint_msg("creator".to_string());
-
-        // let msg = ExecuteMsg::Mint(mint_msg);
-        // let res: Response = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-        let res = handle_mint(deps.as_mut(), env.clone(), info.clone(), mint_msg).unwrap();
-        assert_eq!(0, res.messages.len());
-        assert_eq!(4, res.attributes.len());
-        assert_eq!(res.attributes[3].key, "token_id");
-        assert_eq!(res.attributes[3].value, "1");
-
-        let stored_state = query_config(deps.as_ref());
-        assert_eq!(stored_state.name, "TestNFT");
-        assert_eq!(stored_state.symbol, "NFT");
-        assert_eq!(stored_state.minter, Addr::unchecked("minter"));
-        assert_eq!(stored_state.num_tokens, 1);
-
-        let stored_tokens = query_tokens(deps.as_ref(), 1);
-        assert_eq!(stored_tokens.owner, "creator");
-        assert_eq!(stored_tokens.token_id, 1);
-        assert_eq!(stored_tokens.base_price, coins(1000, DENOM.to_string()));
-        assert_eq!(stored_tokens.approvals, None);
-        assert_eq!(stored_tokens.token_uri, None);
     }
 
     #[test]
@@ -467,7 +533,7 @@ mod tests {
         assert_eq!(4, res.attributes.len());
 
         // Add approval to the token
-        let mut token = query_tokens(deps.as_ref(), 1u64);
+        let mut token = query_tokens(deps.as_ref(), 1u64).unwrap();
         token.approvals = Some(Approval {
             operator: Addr::unchecked("operator"),
             expires: Expiration::Never {},
