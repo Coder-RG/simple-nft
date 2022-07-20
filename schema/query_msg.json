@@ -187,68 +187,6 @@
         }
       },
       "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
-        "tokens"
-      ],
-      "properties": {
-        "tokens": {
-          "type": "object",
-          "required": [
-            "owner"
-          ],
-          "properties": {
-            "limit": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint32",
-              "minimum": 0.0
-            },
-            "owner": {
-              "type": "string"
-            },
-            "start_after": {
-              "type": [
-                "boolean",
-                "null"
-              ]
-            }
-          }
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
-        "all_tokens"
-      ],
-      "properties": {
-        "all_tokens": {
-          "type": "object",
-          "properties": {
-            "limit": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint32",
-              "minimum": 0.0
-            },
-            "start_after": {
-              "type": [
-                "boolean",
-                "null"
-              ]
-            }
-          }
-        }
-      },
-      "additionalProperties": false
     }
   ]
 }
