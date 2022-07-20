@@ -155,7 +155,7 @@ fn handle_send_nft(
 
 pub fn handle_approve(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     operator: &str,
     token_id: u64,
@@ -173,6 +173,10 @@ pub fn handle_approve(
             None => Expiration::Never {},
         },
     };
+
+    if appr.expires.is_expired(&env.block) {
+        return Err(ContractError::Expired);
+    }
     // Apply approval to the token
     token.approvals = Some(appr);
     TOKENS.save(deps.storage, token_id, &token)?;
@@ -305,7 +309,7 @@ pub fn handle_mint(
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins, Addr, StdError, Timestamp};
+    use cosmwasm_std::{coins, Addr, StdError};
     use cw721::Expiration;
 
     const DENOM: &str = "ubit";
@@ -433,7 +437,8 @@ mod tests {
     #[test]
     fn approve() {
         let mut deps = mock_dependencies();
-        let env = mock_env();
+        let mut env = mock_env();
+        env.block.height = 50u64;
         let info = mock_info("creator", &coins(0, &DENOM.to_string()));
 
         let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
@@ -463,6 +468,7 @@ mod tests {
         assert_eq!(token.approvals.unwrap().expires, Expiration::Never {});
 
         // Unsuccessful approval request
+        // * empty operator field
         let approve_msg = ExecuteMsg::Approve {
             operator: String::new(),
             token_id: 1u64,
@@ -474,6 +480,8 @@ mod tests {
             ContractError::Std(StdError::GenericErr { .. }) => {}
             e => panic!("{:?}", e),
         };
+
+        // * Invalid token
         let approve_msg = ExecuteMsg::Approve {
             operator: "operator".to_string(),
             token_id: 2u64,
@@ -481,6 +489,19 @@ mod tests {
         };
         let info = mock_info("owner1", &coins(0, &DENOM.to_string()));
         execute(deps.as_mut(), env.clone(), info.clone(), approve_msg).unwrap_err();
+
+        // * expired approval
+        let approve_msg = ExecuteMsg::Approve {
+            operator: "operator".to_string(),
+            token_id: 1u64,
+            expires: Some(Expiration::AtHeight(45u64)),
+        };
+        let info = mock_info("owner1", &coins(0, &DENOM.to_string()));
+        let res = execute(deps.as_mut(), env.clone(), info.clone(), approve_msg).unwrap_err();
+        match res {
+            ContractError::Expired {} => {}
+            e => panic!("{:?}", e),
+        };
     }
 
     #[test]
