@@ -111,19 +111,6 @@ pub enum QueryMsg {
         token_id: String,
         include_expired: Option<bool>,
     },
-    // Return tokens owned by given owner.
-    // Part of Enumerable Extension
-    Tokens {
-        owner: String,
-        start_after: Option<bool>,
-        limit: Option<u32>,
-    },
-    // Return all tokens controlled by contract.
-    // Part of Enumerable Extension
-    AllTokens {
-        start_after: Option<bool>,
-        limit: Option<u32>,
-    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -167,9 +154,4 @@ pub struct NftInfoResponse {
 pub struct AllNftInfoResponse {
     pub access: OwnerOfResponse,
     pub info: NftInfoResponse,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct TokensResponse {
-    pub tokens: Vec<String>,
 }

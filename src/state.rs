@@ -38,3 +38,4 @@ pub struct Storage<'a> {
 
 pub const CONFIG: Item<State> = Item::new("config");
 pub const TOKENS: Map<u64, TokenInfo> = Map::new("tokens");
+pub const OPERATOR: Map<(Addr, Addr), Expiration> = Map::new("approvals");

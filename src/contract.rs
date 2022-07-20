@@ -442,10 +442,6 @@ mod tests {
         };
         let info = mock_info("owner1", &coins(0, &DENOM.to_string()));
         execute(deps.as_mut(), env.clone(), info.clone(), approve_msg).unwrap_err();
-        // assert_eq!(
-        //     res.to_string(),
-        //     String::from("Unable to load token with token_id: 2")
-        // );
     }
 
     #[test]
@@ -475,7 +471,7 @@ mod tests {
             Addr::unchecked("operator")
         );
 
-        // Revoke approval
+        // Successful approval revoke
         let revoke_msg = ExecuteMsg::Revoke {
             operator: "operator".to_string(),
             token_id: 1u64,
@@ -487,6 +483,44 @@ mod tests {
 
         let token = query_tokens(deps.as_ref(), 1u64).unwrap();
         assert_eq!(token.approvals, None);
+
+        // Unsuccessful approval revoke
+        // * Invalid token id
+        let revoke_msg = ExecuteMsg::Revoke {
+            operator: "operator".to_string(),
+            token_id: 2u64,
+        };
+
+        let res = execute(deps.as_mut(), env.clone(), info.clone(), revoke_msg).unwrap_err();
+        match res {
+            ContractError::Std(StdError::NotFound { .. }) => {}
+            e => panic!("{:?}", e),
+        };
+
+        // * Approval being revoked for an address that isn't approved.
+        let revoke_msg = ExecuteMsg::Revoke {
+            operator: "unknown".to_string(),
+            token_id: 1u64,
+        };
+
+        let res = execute(deps.as_mut(), env.clone(), info.clone(), revoke_msg).unwrap_err();
+        match res {
+            ContractError::ApprovalNotFound { .. } => {}
+            e => panic!("{:?}", e),
+        };
+
+        // * Unauthorised sender
+        let info = mock_info("owner2", &coins(0, &DENOM.to_string()));
+        let revoke_msg = ExecuteMsg::Revoke {
+            operator: "operator".to_string(),
+            token_id: 1u64,
+        };
+
+        let res = execute(deps.as_mut(), env.clone(), info.clone(), revoke_msg).unwrap_err();
+        match res {
+            ContractError::Unauthorized => {}
+            e => panic!("{:?}", e),
+        };
     }
 
     #[test]
