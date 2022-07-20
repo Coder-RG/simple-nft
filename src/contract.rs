@@ -8,7 +8,7 @@ use cw2::set_contract_version;
 use cw721::{Cw721ReceiveMsg, Expiration};
 
 use crate::query::{query_config, query_tokens};
-use crate::state::{State, TokenInfo, CONFIG, TOKENS};
+use crate::state::{State, TokenInfo, CONFIG, OPERATORS, TOKENS};
 use crate::{
     msg::{Approval, ExecuteMsg, InstantiateMsg, MintMsg},
     ContractError,
@@ -79,7 +79,10 @@ pub fn execute(
             expires,
         } => handle_approve(deps, env, info, operator.as_str(), token_id, expires),
 
-        // ExecuteMsg::ApproveAll { .. } => handle_approve_all(deps, env, info, msg),
+        ExecuteMsg::ApproveAll { operator, expires } => {
+            handle_approve_all(deps, env, info, operator, expires)
+        }
+
         ExecuteMsg::Revoke { operator, token_id } => {
             handle_revoke(deps, env, info, operator, token_id)
         }
@@ -181,6 +184,42 @@ pub fn handle_approve(
         .add_attribute("token_id", token_id.to_string()))
 }
 
+fn handle_approve_all(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    operator: String,
+    expires: Option<Expiration>,
+) -> Result<Response, ContractError> {
+    let operator_addr = deps.api.addr_validate(&operator[..])?;
+    let expires = match expires {
+        Some(val) => val,
+        None => Expiration::Never {},
+    };
+
+    let appr = OPERATORS.may_load(deps.storage, (&info.sender, &operator_addr))?;
+    match appr {
+        Some(val) => {
+            if val == expires {
+                return Err(ContractError::OperatorApproved { operator });
+            };
+        }
+        None => {}
+    }
+
+    if expires.is_expired(&env.block) {
+        return Err(ContractError::Expired);
+    }
+
+    // Save the new/updated details
+    OPERATORS.save(deps.storage, (&info.sender, &operator_addr), &expires)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "approve_all")
+        .add_attribute("from", info.sender)
+        .add_attribute("approved", operator))
+}
+
 pub fn handle_revoke(
     deps: DepsMut,
     _env: Env,
@@ -266,7 +305,7 @@ pub fn handle_mint(
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins, Addr, StdError};
+    use cosmwasm_std::{coins, Addr, StdError, Timestamp};
     use cw721::Expiration;
 
     const DENOM: &str = "ubit";
@@ -392,7 +431,7 @@ mod tests {
     }
 
     #[test]
-    fn approval() {
+    fn approve() {
         let mut deps = mock_dependencies();
         let env = mock_env();
         let info = mock_info("creator", &coins(0, &DENOM.to_string()));
@@ -442,6 +481,64 @@ mod tests {
         };
         let info = mock_info("owner1", &coins(0, &DENOM.to_string()));
         execute(deps.as_mut(), env.clone(), info.clone(), approve_msg).unwrap_err();
+    }
+
+    #[test]
+    fn approve_all() {
+        let mut deps = mock_dependencies();
+        let mut env = mock_env();
+        env.block.height = 25u64;
+        let info = mock_info("creator", &coins(0, &DENOM.to_string()));
+        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
+        instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+        // Successful approval for operator
+        let operator = String::from("operator");
+        let expires = None;
+
+        let res = handle_approve_all(deps.as_mut(), env.clone(), info.clone(), operator, expires)
+            .unwrap();
+        assert_eq!(res.messages.len(), 0);
+        assert_eq!(res.attributes.len(), 3);
+
+        let res = OPERATORS
+            .load(&deps.storage, (&info.sender, &Addr::unchecked("operator")))
+            .unwrap();
+        assert_eq!(res, Expiration::Never {});
+
+        // Unsuccessful approval for operator
+        // * Operator exists
+        let operator = String::from("operator");
+        let expires = None;
+        let res = handle_approve_all(deps.as_mut(), env.clone(), info.clone(), operator, expires)
+            .unwrap_err();
+
+        match res {
+            ContractError::OperatorApproved { .. } => {}
+            e => panic!("{:?}", e),
+        };
+
+        // * Expired height
+        let operator = String::from("operator");
+        let expires = Some(Expiration::AtHeight(24u64));
+
+        let res = handle_approve_all(deps.as_mut(), env.clone(), info.clone(), operator, expires)
+            .unwrap_err();
+        match res {
+            ContractError::Expired => {}
+            e => panic!("{:?}", e),
+        };
+
+        // * Expired time
+        let operator = String::from("operator");
+        let expires = Some(Expiration::AtTime(env.block.time.minus_seconds(64u64)));
+
+        let res = handle_approve_all(deps.as_mut(), env.clone(), info.clone(), operator, expires)
+            .unwrap_err();
+        match res {
+            ContractError::Expired => {}
+            e => panic!("{:?}", e),
+        };
     }
 
     #[test]

@@ -17,6 +17,9 @@ pub enum ContractError {
     #[error("Cannot set approval that is already expired")]
     Expired,
 
+    #[error("{operator} has already been approved")]
+    OperatorApproved { operator: String },
+
     #[error("Approval not found for: {operator}")]
     ApprovalNotFound { operator: String },
 
