@@ -87,13 +87,9 @@ pub fn execute(
             handle_revoke(deps, env, info, operator, token_id)
         }
 
-        // ExecuteMsg::RevokeAll { .. } => handle_revoke_all(deps, env, info, msg),
-        ExecuteMsg::Mint(msg) => handle_mint(deps, env, info, msg),
+        ExecuteMsg::RevokeAll { operator } => handle_revoke_all(deps, env, info, operator),
 
-        // Other forms not yet implemented throw an error
-        _ => Err(ContractError::CustomError {
-            val: String::from("Not implemented"),
-        }),
+        ExecuteMsg::Mint(msg) => handle_mint(deps, env, info, msg),
     }
 }
 
@@ -245,6 +241,26 @@ pub fn handle_revoke(
         .add_attribute("from", info.sender)
         .add_attribute("revoked", revoked.operator)
         .add_attribute("token_id", token_id.to_string()))
+}
+
+pub fn handle_revoke_all(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    operator: String,
+) -> Result<Response, ContractError> {
+    let operator_addr = deps.api.addr_validate(operator.as_str())?;
+
+    if OPERATORS.has(deps.storage, (&info.sender, &operator_addr)) {
+        OPERATORS.remove(deps.storage, (&info.sender, &operator_addr));
+    } else {
+        return Err(ContractError::ApprovalNotFound { operator });
+    }
+
+    Ok(Response::new()
+        .add_attribute("action", "revoke_all")
+        .add_attribute("from", info.sender)
+        .add_attribute("revoked", operator))
 }
 
 pub fn handle_mint(

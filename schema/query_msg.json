@@ -61,15 +61,21 @@
         "approved": {
           "type": "object",
           "required": [
+            "include_expired",
             "operator",
-            "owner"
+            "token_id"
           ],
           "properties": {
+            "include_expired": {
+              "type": "boolean"
+            },
             "operator": {
               "type": "string"
             },
-            "owner": {
-              "type": "string"
+            "token_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             }
           }
         }
@@ -181,7 +187,9 @@
               ]
             },
             "token_id": {
-              "type": "string"
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
             }
           }
         }
