@@ -133,9 +133,8 @@ mod tests {
     use super::*;
     use crate::contract::{execute, instantiate};
     use crate::msg::{ExecuteMsg, InstantiateMsg, MintMsg};
-    use cosmwasm_std::coins;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{from_binary, Coin, Uint128};
+    use cosmwasm_std::{coins, from_binary, Coin, Uint128};
 
     const DENOM: &str = "ubit";
 
@@ -155,21 +154,20 @@ mod tests {
     fn asking_price() {
         let mut deps = mock_dependencies();
         let env = mock_env();
-
         let info = mock_info("minter", &coins(0u128, &DENOM.to_string()));
         let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
         let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
         assert_eq!(res.messages.len(), 0);
 
         let mint_msg = mint_msg("creator".to_string());
-
         let msg = ExecuteMsg::Mint(mint_msg);
         let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
         assert_eq!(0, res.messages.len());
         assert_eq!(4, res.attributes.len());
 
+        // Successful query
         let query_msg = QueryMsg::AskingPrice { token_id: 1 };
-        let res = query(deps.as_ref(), env, query_msg).unwrap();
+        let res = query(deps.as_ref(), env.clone(), query_msg).unwrap();
         let res: AskingPriceResponse = from_binary(&res).unwrap();
         assert_eq!(
             res.price,
@@ -178,13 +176,20 @@ mod tests {
                 denom: DENOM.to_string()
             }]
         );
+
+        // Unsuccessful query
+        let query_msg = QueryMsg::AskingPrice { token_id: 2 };
+        let res = query(deps.as_ref(), env, query_msg).unwrap_err();
+        match res {
+            StdError::NotFound { .. } => {}
+            e => panic!("{:?}", e),
+        };
     }
 
     #[test]
     fn owner_of() {
         let mut deps = mock_dependencies();
         let env = mock_env();
-
         let info = mock_info("minter", &coins(0u128, &DENOM.to_string()));
         let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
         let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
@@ -194,9 +199,119 @@ mod tests {
         let msg = ExecuteMsg::Mint(mint_msg);
         execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
-        let res = query_owner_of(deps.as_ref(), env, 1u64, None).unwrap();
+        // Successful response
+        let res = query_owner_of(deps.as_ref(), env.clone(), 1u64, None).unwrap();
         let res: OwnerOfResponse = from_binary(&res).unwrap();
         assert_eq!(res.owner, "creator");
         assert_eq!(res.approvals, None);
+
+        // Unsuccessful response
+        let res = query_owner_of(deps.as_ref(), env.clone(), 2u64, Some(true)).unwrap_err();
+        match res {
+            StdError::NotFound { .. } => {}
+            e => panic!("{:?}", e),
+        };
+    }
+
+    #[test]
+    fn num_tokens() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info("minter", &coins(0u128, &DENOM.to_string()));
+        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
+        let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+        assert_eq!(res.messages.len(), 0);
+
+        // Query # of tokens after initialization
+        let res = query_num_tokens(deps.as_ref(), env.clone()).unwrap();
+        let result: NumTokensResponse = from_binary(&res).unwrap();
+        assert_eq!(result.tokens, 0);
+
+        let mint_msg = mint_msg("creator".to_string());
+        let msg = ExecuteMsg::Mint(mint_msg);
+        execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+        // Query # of tokens after minting
+        let res = query_num_tokens(deps.as_ref(), env.clone()).unwrap();
+        let result: NumTokensResponse = from_binary(&res).unwrap();
+        assert_eq!(result.tokens, 1);
+    }
+
+    #[test]
+    fn nft_info() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info("minter", &coins(0u128, &DENOM.to_string()));
+        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
+        let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+        assert_eq!(res.messages.len(), 0);
+
+        let mint_msg = mint_msg("creator".to_string());
+        let msg = ExecuteMsg::Mint(mint_msg);
+        execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+        // Successful query
+        let msg = QueryMsg::NftInfo { token_id: 1u64 };
+        let res = query(deps.as_ref(), env.clone(), msg).unwrap();
+        let result: NftInfoResponse = from_binary(&res).unwrap();
+        assert_eq!(result.token_uri, String::from("None"));
+
+        // Unsuccessful query
+        let msg = QueryMsg::NftInfo { token_id: 2u64 };
+        let res = query(deps.as_ref(), env.clone(), msg).unwrap_err();
+        match res {
+            StdError::NotFound { .. } => {}
+            e => panic!("{:?}", e),
+        };
+    }
+
+    #[test]
+    fn all_nft_info() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info("minter", &coins(0u128, &DENOM.to_string()));
+        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
+        let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+        assert_eq!(res.messages.len(), 0);
+
+        let msg = ExecuteMsg::Mint(mint_msg(String::from("owner")));
+        execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+        // Successful query
+        let msg = QueryMsg::AllNftInfo {
+            token_id: 1u64,
+            include_expired: Some(true),
+        };
+        let res = query(deps.as_ref(), env.clone(), msg).unwrap();
+        let result: AllNftInfoResponse = from_binary(&res).unwrap();
+        assert_eq!(
+            result.owner,
+            OwnerOfResponse {
+                owner: String::from("owner"),
+                approvals: None,
+            }
+        );
+        assert_eq!(
+            result.info,
+            NftInfoResponse {
+                token_uri: String::from("None")
+            }
+        );
+    }
+
+    #[test]
+    fn contract_info() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info("minter", &coins(0u128, &DENOM.to_string()));
+        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
+        let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+        assert_eq!(res.messages.len(), 0);
+
+        let msg = QueryMsg::ContractInfo {};
+        let res = query(deps.as_ref(), env.clone(), msg).unwrap();
+        let result: ContractInfoResponse = from_binary(&res).unwrap();
+        assert_eq!(result.name, String::from("TestNFT"));
+        assert_eq!(result.symbol, String::from("NFT"));
     }
 }

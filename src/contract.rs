@@ -527,6 +527,7 @@ mod tests {
         instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
         // Successful approval for operator
+        // * new operator
         let operator = String::from("operator");
         let expires = None;
 
@@ -540,10 +541,19 @@ mod tests {
             .unwrap();
         assert_eq!(res, Expiration::Never {});
 
+        // * update expiration
+        let operator = String::from("operator");
+        let expires = Some(Expiration::AtHeight(130_000));
+
+        let res = handle_approve_all(deps.as_mut(), env.clone(), info.clone(), operator, expires)
+            .unwrap();
+        assert_eq!(res.messages.len(), 0);
+        assert_eq!(res.attributes.len(), 3);
+
         // Unsuccessful approval for operator
         // * Operator exists
         let operator = String::from("operator");
-        let expires = None;
+        let expires = Some(Expiration::AtHeight(130_000));
         let res = handle_approve_all(deps.as_mut(), env.clone(), info.clone(), operator, expires)
             .unwrap_err();
 
@@ -650,6 +660,58 @@ mod tests {
         let res = execute(deps.as_mut(), env.clone(), info.clone(), revoke_msg).unwrap_err();
         match res {
             ContractError::Unauthorized => {}
+            e => panic!("{:?}", e),
+        };
+    }
+
+    #[test]
+    fn revoke_all() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info("owner", &coins(0u128, &DENOM.to_string()));
+
+        // Approve an address for all tokens
+        let res = handle_approve_all(
+            deps.as_mut(),
+            env.clone(),
+            info.clone(),
+            String::from("operator"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(res.messages.len(), 0);
+        assert_eq!(res.attributes.len(), 3);
+
+        // Check that the new approval exists in correct format
+        let key = (&Addr::unchecked("owner"), &Addr::unchecked("operator"));
+        assert!(OPERATORS.has(&deps.storage, key));
+        assert_eq!(
+            OPERATORS.load(&deps.storage, key).unwrap(),
+            Expiration::Never {}
+        );
+
+        // Revoke previously provided approval
+        let res = handle_revoke_all(
+            deps.as_mut(),
+            env.clone(),
+            info.clone(),
+            String::from("operator"),
+        )
+        .unwrap();
+        assert_eq!(res.messages.len(), 0);
+        assert_eq!(res.attributes.len(), 3);
+        assert!(!OPERATORS.has(&deps.storage, key));
+
+        // Unsuccessful revoke
+        let res = handle_revoke_all(
+            deps.as_mut(),
+            env.clone(),
+            info.clone(),
+            String::from("operator"),
+        )
+        .unwrap_err();
+        match res {
+            ContractError::ApprovalNotFound { .. } => {}
             e => panic!("{:?}", e),
         };
     }
