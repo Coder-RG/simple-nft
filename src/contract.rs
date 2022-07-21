@@ -198,13 +198,10 @@ fn handle_approve_all(
     };
 
     let appr = OPERATORS.may_load(deps.storage, (&info.sender, &operator_addr))?;
-    match appr {
-        Some(val) => {
-            if val == expires {
-                return Err(ContractError::OperatorApproved { operator });
-            };
+    if let Some(val) = appr {
+        if val == expires {
+            return Err(ContractError::OperatorApproved { operator });
         }
-        None => {}
     }
 
     if expires.is_expired(&env.block) {
