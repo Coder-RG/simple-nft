@@ -1,7 +1,8 @@
-use cosmwasm_std::{entry_point, to_binary, Binary, Deps, Env, StdError, StdResult};
+use cosmwasm_std::{entry_point, from_binary, to_binary, Binary, Deps, Env, StdError, StdResult};
 
 use crate::msg::{
-    AskingPriceResponse, NftInfoResponse, NumTokensResponse, OwnerOfResponse, QueryMsg,
+    AllNftInfoResponse, AskingPriceResponse, ContractInfoResponse, NftInfoResponse,
+    NumTokensResponse, OwnerOfResponse, QueryMsg,
 };
 use crate::state::{State, TokenInfo, CONFIG, TOKENS};
 
@@ -18,6 +19,13 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::NumTokens {} => query_num_tokens(deps, env),
 
         QueryMsg::NftInfo { token_id } => query_nft_info(deps, env, token_id),
+
+        QueryMsg::AllNftInfo {
+            token_id,
+            include_expired,
+        } => query_all_nft_info(deps, env, token_id, include_expired),
+
+        QueryMsg::ContractInfo {} => query_contract_info(deps, env),
 
         // Returns not implemented msg for rest
         _ => Err(StdError::NotFound {
@@ -66,11 +74,37 @@ fn query_num_tokens(deps: Deps, _env: Env) -> StdResult<Binary> {
     })
 }
 
+fn query_contract_info(deps: Deps, _env: Env) -> StdResult<Binary> {
+    let config = query_config(deps)?;
+    to_binary(&ContractInfoResponse {
+        name: config.name,
+        symbol: config.symbol,
+    })
+}
+
 fn query_nft_info(deps: Deps, _env: Env, token_id: u64) -> StdResult<Binary> {
     let token = query_tokens(deps, token_id)?;
     let res = NftInfoResponse {
         token_uri: token.token_uri.unwrap_or_else(|| "None".to_string()),
     };
+    to_binary(&res)
+}
+
+fn query_all_nft_info(
+    deps: Deps,
+    env: Env,
+    token_id: u64,
+    include_expired: Option<bool>,
+) -> StdResult<Binary> {
+    let owner: OwnerOfResponse = from_binary(&query_owner_of(
+        deps,
+        env.clone(),
+        token_id,
+        include_expired,
+    )?)?;
+    let nft: NftInfoResponse = from_binary(&query_nft_info(deps, env, token_id)?)?;
+
+    let res = AllNftInfoResponse { owner, info: nft };
     to_binary(&res)
 }
 

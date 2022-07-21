@@ -83,10 +83,11 @@ pub enum QueryMsg {
         token_id: u64,
         include_expired: Option<bool>,
     },
-    // Return the operator, who has approval for all tokens of the given owner
+    // Return the operator, who has approval for given token
     Approved {
-        owner: String,
+        token_id: u64,
         operator: String,
+        include_expired: bool,
     },
     // Return all operators with access to all of the given owner's tokens
     ApprovedForAll {
@@ -108,7 +109,7 @@ pub enum QueryMsg {
     // Return NFT info and OwnerOf response.
     // Part of Metadata Extension
     AllNftInfo {
-        token_id: String,
+        token_id: u64,
         include_expired: Option<bool>,
     },
 }
@@ -129,10 +130,10 @@ pub struct ApprovedResponse {
     pub approval: Approval,
 }
 
-// #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-// pub struct ApprovedForAllResponse {
-//     pub approval: Vec<Approval>,
-// }
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct ApprovedForAllResponse {
+    pub approval: Vec<Approval>,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct NumTokensResponse {
@@ -152,6 +153,6 @@ pub struct NftInfoResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct AllNftInfoResponse {
-    pub access: OwnerOfResponse,
+    pub owner: OwnerOfResponse,
     pub info: NftInfoResponse,
 }

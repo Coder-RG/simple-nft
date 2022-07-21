@@ -30,12 +30,6 @@ pub struct TokenInfo {
     pub token_id: u64,
 }
 
-pub struct Storage<'a> {
-    pub operator: Map<'a, (Addr, Addr), Expiration>,
-    pub config: Item<'a, State>,
-    pub tokens: Map<'a, u64, TokenInfo>,
-}
-
 pub const CONFIG: Item<State> = Item::new("config");
 pub const TOKENS: Map<u64, TokenInfo> = Map::new("tokens");
 pub const OPERATORS: Map<(&Addr, &Addr), Expiration> = Map::new("approvals");
