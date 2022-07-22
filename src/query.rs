@@ -1,10 +1,13 @@
 use cosmwasm_std::{entry_point, from_binary, to_binary, Binary, Deps, Env, StdError, StdResult};
 
 use crate::msg::{
-    AllNftInfoResponse, AskingPriceResponse, ContractInfoResponse, NftInfoResponse,
-    NumTokensResponse, OwnerOfResponse, QueryMsg,
+    AllNftInfoResponse, Approval, ApprovedResponse, AskingPriceResponse, ContractInfoResponse,
+    NftInfoResponse, NumTokensResponse, OwnerOfResponse, QueryMsg,
 };
 use crate::state::{State, TokenInfo, CONFIG, TOKENS};
+
+// const DEFAULT_LIMIT: u32 = 10;
+// const MAX_LIMIT: u32 = 30;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
@@ -16,7 +19,22 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             include_expired,
         } => query_owner_of(deps, env, token_id, include_expired),
 
+        QueryMsg::Approval {
+            token_id,
+            operator,
+            include_expired,
+        } => query_approved(deps, env, token_id, operator, include_expired),
+
+        QueryMsg::AllOperators {
+            owner,
+            include_expired,
+            start_after,
+            limit,
+        } => query_approved_for_all(deps, env, owner, include_expired, start_after, limit),
+
         QueryMsg::NumTokens {} => query_num_tokens(deps, env),
+
+        QueryMsg::ContractInfo {} => query_contract_info(deps, env),
 
         QueryMsg::NftInfo { token_id } => query_nft_info(deps, env, token_id),
 
@@ -24,13 +42,6 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             token_id,
             include_expired,
         } => query_all_nft_info(deps, env, token_id, include_expired),
-
-        QueryMsg::ContractInfo {} => query_contract_info(deps, env),
-
-        // Returns not implemented msg for rest
-        _ => Err(StdError::NotFound {
-            kind: String::from("Not Implemented"),
-        }),
     }
 }
 
@@ -65,6 +76,45 @@ fn query_owner_of(
     };
 
     to_binary(&result)
+}
+
+fn query_approved(
+    deps: Deps,
+    env: Env,
+    token_id: u64,
+    operator: String,
+    include_expired: Option<bool>,
+) -> StdResult<Binary> {
+    let token = query_tokens(deps, token_id)?;
+    let operator_addr = deps.api.addr_validate(operator.as_str())?;
+
+    if let Some(val) = token.approvals {
+        if val.operator == operator_addr
+            && (!val.expires.is_expired(&env.block) || include_expired.unwrap_or(false))
+        {
+            let res = ApprovedResponse {
+                approval: Approval {
+                    operator: operator_addr,
+                    expires: val.expires,
+                },
+            };
+            return to_binary(&res);
+        }
+    }
+    Err(StdError::NotFound {
+        kind: String::from("Approval not found for given address"),
+    })
+}
+
+fn query_approved_for_all(
+    _deps: Deps,
+    _env: Env,
+    _owner: String,
+    _include_expired: Option<bool>,
+    _start_after: Option<u64>,
+    _limit: Option<u32>,
+) -> StdResult<Binary> {
+    to_binary("Not Implemented")
 }
 
 fn query_num_tokens(deps: Deps, _env: Env) -> StdResult<Binary> {

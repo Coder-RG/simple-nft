@@ -84,16 +84,16 @@ pub enum QueryMsg {
         include_expired: Option<bool>,
     },
     // Return the operator, who has approval for given token
-    Approved {
+    Approval {
         token_id: u64,
         operator: String,
-        include_expired: bool,
+        include_expired: Option<bool>,
     },
     // Return all operators with access to all of the given owner's tokens
-    ApprovedForAll {
+    AllOperators {
         owner: String,
         include_expired: Option<bool>,
-        start_after: Option<String>,
+        start_after: Option<u64>,
         limit: Option<u32>,
     },
     // Number of tokens issued thus far

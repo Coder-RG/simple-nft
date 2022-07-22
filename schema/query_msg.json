@@ -55,19 +55,21 @@
     {
       "type": "object",
       "required": [
-        "approved"
+        "approval"
       ],
       "properties": {
-        "approved": {
+        "approval": {
           "type": "object",
           "required": [
-            "include_expired",
             "operator",
             "token_id"
           ],
           "properties": {
             "include_expired": {
-              "type": "boolean"
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "operator": {
               "type": "string"
@@ -85,10 +87,10 @@
     {
       "type": "object",
       "required": [
-        "approved_for_all"
+        "all_operators"
       ],
       "properties": {
-        "approved_for_all": {
+        "all_operators": {
           "type": "object",
           "required": [
             "owner"
@@ -113,9 +115,11 @@
             },
             "start_after": {
               "type": [
-                "string",
+                "integer",
                 "null"
-              ]
+              ],
+              "format": "uint64",
+              "minimum": 0.0
             }
           }
         }

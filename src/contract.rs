@@ -2,7 +2,7 @@
 //! These actions are performed using *wasmd*.
 
 // #[cfg(not(feature = "library"))]
-use cosmwasm_std::{entry_point, Binary, DepsMut, Env, MessageInfo, Response};
+use cosmwasm_std::{entry_point, Binary, Deps, DepsMut, Env, MessageInfo, Response};
 
 use cw2::set_contract_version;
 use cw721::{Cw721ReceiveMsg, Expiration};
@@ -93,25 +93,42 @@ pub fn execute(
     }
 }
 
+pub fn check_is_authorized(
+    deps: Deps,
+    env: &Env,
+    info: &MessageInfo,
+    token_id: u64,
+) -> Result<(), ContractError> {
+    let token = query_tokens(deps, token_id)?;
+    if token.owner == info.sender {
+        return Ok(());
+    };
+
+    let token_appr = token.approvals;
+    if let Some(val) = token_appr {
+        if val.operator == info.sender && !val.expires.is_expired(&env.block) {
+            return Ok(());
+        }
+    };
+    let super_appr = OPERATORS.may_load(deps.storage, (&token.owner, &info.sender))?;
+    if let Some(val) = super_appr {
+        if !val.is_expired(&env.block) {
+            return Ok(());
+        }
+    };
+    Err(ContractError::Unauthorized)
+}
+
 pub fn handle_transfer_nft(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     recipient: String,
     token_id: u64,
 ) -> Result<Response, ContractError> {
     let mut requested_token = TOKENS.load(deps.storage, token_id)?;
 
-    // if sender is not the onwer or an approved operator, return Err
-    if requested_token.owner != info.sender {
-        if let Some(val) = requested_token.approvals {
-            if info.sender != val.operator {
-                return Err(ContractError::Unauthorized);
-            }
-        } else {
-            return Err(ContractError::Unauthorized);
-        }
-    }
+    check_is_authorized(deps.as_ref(), &env, &info, token_id)?;
 
     requested_token.owner = deps.api.addr_validate(&recipient)?;
     requested_token.approvals = None;
