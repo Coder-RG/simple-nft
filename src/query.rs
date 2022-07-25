@@ -1,13 +1,18 @@
-use cosmwasm_std::{entry_point, from_binary, to_binary, Binary, Deps, Env, StdError, StdResult};
+use cosmwasm_std::{
+    entry_point, from_binary, to_binary, Addr, Binary, Deps, Env, Order, StdError, StdResult,
+};
+use cw721::{Expiration, OperatorsResponse};
+use cw_storage_plus::Bound;
+use cw_utils::maybe_addr;
 
 use crate::msg::{
     AllNftInfoResponse, Approval, ApprovedResponse, AskingPriceResponse, ContractInfoResponse,
     NftInfoResponse, NumTokensResponse, OwnerOfResponse, QueryMsg,
 };
-use crate::state::{State, TokenInfo, CONFIG, TOKENS};
+use crate::state::{State, TokenInfo, CONFIG, OPERATORS, TOKENS};
 
-// const DEFAULT_LIMIT: u32 = 10;
-// const MAX_LIMIT: u32 = 30;
+const DEFAULT_LIMIT: u32 = 10;
+const MAX_LIMIT: u32 = 30;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
@@ -107,14 +112,34 @@ fn query_approved(
 }
 
 fn query_approved_for_all(
-    _deps: Deps,
-    _env: Env,
-    _owner: String,
-    _include_expired: Option<bool>,
-    _start_after: Option<u64>,
-    _limit: Option<u32>,
+    deps: Deps,
+    env: Env,
+    owner: String,
+    include_expired: Option<bool>,
+    start_after: Option<String>,
+    limit: Option<u32>,
 ) -> StdResult<Binary> {
-    to_binary("Not Implemented")
+    let include_expired = include_expired.unwrap_or(false);
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+    let start_addr = maybe_addr(deps.api, start_after)?;
+    let start = start_addr.as_ref().map(Bound::exclusive);
+    let owner_addr = deps.api.addr_validate(&owner)?;
+
+    let res: StdResult<Vec<_>> = OPERATORS
+        .prefix(&owner_addr)
+        .range(deps.storage, start, None, Order::Ascending)
+        .filter(|r| include_expired || r.is_err() || !r.as_ref().unwrap().1.is_expired(&env.block))
+        .take(limit)
+        .map(parse_approval)
+        .collect();
+    to_binary(&OperatorsResponse { operators: res? })
+}
+
+fn parse_approval(item: StdResult<(Addr, Expiration)>) -> StdResult<cw721::Approval> {
+    item.map(|(spender, expires)| cw721::Approval {
+        spender: spender.to_string(),
+        expires,
+    })
 }
 
 fn query_num_tokens(deps: Deps, _env: Env) -> StdResult<Binary> {
@@ -363,5 +388,48 @@ mod tests {
         let result: ContractInfoResponse = from_binary(&res).unwrap();
         assert_eq!(result.name, String::from("TestNFT"));
         assert_eq!(result.symbol, String::from("NFT"));
+    }
+
+    #[test]
+    fn approval() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info("minter", &coins(0u128, &DENOM.to_string()));
+        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
+        let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+        assert_eq!(res.messages.len(), 0);
+
+        // Mint a new token
+        let mint_msg = mint_msg("creator".to_string());
+        let msg = ExecuteMsg::Mint(mint_msg);
+        execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+        // Approve operator
+        let msg = ExecuteMsg::Approve {
+            operator: "operator".to_string(),
+            token_id: 1,
+            expires: None,
+        };
+        let info = mock_info("creator", &coins(0u128, &DENOM.to_string()));
+        execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+        // Successful query
+        let res = query_approved(
+            deps.as_ref(),
+            env.clone(),
+            1,
+            String::from("operator"),
+            Some(false),
+        )
+        .unwrap();
+        assert_eq!(
+            from_binary::<ApprovedResponse>(&res).unwrap(),
+            ApprovedResponse {
+                approval: Approval {
+                    operator: Addr::unchecked("operator"),
+                    expires: Expiration::Never {}
+                }
+            }
+        )
     }
 }

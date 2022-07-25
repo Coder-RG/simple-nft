@@ -93,7 +93,7 @@ pub enum QueryMsg {
     AllOperators {
         owner: String,
         include_expired: Option<bool>,
-        start_after: Option<u64>,
+        start_after: Option<String>,
         limit: Option<u32>,
     },
     // Number of tokens issued thus far
