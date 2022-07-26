@@ -89,6 +89,12 @@ pub enum QueryMsg {
         operator: String,
         include_expired: Option<bool>,
     },
+
+    // All approvals for the given token
+    Approvals {
+        token_id: u64,
+        include_expired: Option<bool>,
+    },
     // Return all operators with access to all of the given owner's tokens
     AllOperators {
         owner: String,
@@ -126,8 +132,13 @@ pub struct OwnerOfResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct ApprovedResponse {
+pub struct ApprovalResponse {
     pub approval: Approval,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct ApprovalsResponse {
+    pub approvals: Vec<Approval>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

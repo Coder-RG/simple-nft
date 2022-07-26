@@ -6,8 +6,8 @@ use cw_storage_plus::Bound;
 use cw_utils::maybe_addr;
 
 use crate::msg::{
-    AllNftInfoResponse, Approval, ApprovedResponse, AskingPriceResponse, ContractInfoResponse,
-    NftInfoResponse, NumTokensResponse, OwnerOfResponse, QueryMsg,
+    AllNftInfoResponse, Approval, ApprovalResponse, ApprovalsResponse, AskingPriceResponse,
+    ContractInfoResponse, NftInfoResponse, NumTokensResponse, OwnerOfResponse, QueryMsg,
 };
 use crate::state::{State, TokenInfo, CONFIG, OPERATORS, TOKENS};
 
@@ -28,7 +28,18 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             token_id,
             operator,
             include_expired,
-        } => query_approved(deps, env, token_id, operator, include_expired),
+        } => to_binary(&query_approval(
+            deps,
+            env,
+            token_id,
+            operator,
+            include_expired,
+        )?),
+
+        QueryMsg::Approvals {
+            token_id,
+            include_expired,
+        } => to_binary(&query_approvals(deps, env, token_id, include_expired)?),
 
         QueryMsg::AllOperators {
             owner,
@@ -83,13 +94,13 @@ fn query_owner_of(
     to_binary(&result)
 }
 
-fn query_approved(
+fn query_approval(
     deps: Deps,
     env: Env,
     token_id: u64,
     operator: String,
     include_expired: Option<bool>,
-) -> StdResult<Binary> {
+) -> StdResult<ApprovalResponse> {
     let token = query_tokens(deps, token_id)?;
     let operator_addr = deps.api.addr_validate(operator.as_str())?;
 
@@ -97,18 +108,35 @@ fn query_approved(
         if val.operator == operator_addr
             && (!val.expires.is_expired(&env.block) || include_expired.unwrap_or(false))
         {
-            let res = ApprovedResponse {
+            let res = ApprovalResponse {
                 approval: Approval {
                     operator: operator_addr,
                     expires: val.expires,
                 },
             };
-            return to_binary(&res);
+            return Ok(res);
         }
     }
     Err(StdError::NotFound {
         kind: String::from("Approval not found for given address"),
     })
+}
+
+fn query_approvals(
+    deps: Deps,
+    env: Env,
+    token_id: u64,
+    include_expired: Option<bool>,
+) -> StdResult<ApprovalsResponse> {
+    let include_expired = include_expired.unwrap_or(false);
+    let mut res: Vec<Approval> = vec![];
+    let token = query_tokens(deps, token_id)?;
+    if let Some(val) = token.approvals {
+        if include_expired || !val.expires.is_expired(&env.block) {
+            res.push(val);
+        }
+    };
+    Ok(ApprovalsResponse { approvals: res })
 }
 
 fn query_approved_for_all(
@@ -414,7 +442,7 @@ mod tests {
         execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
         // Successful query
-        let res = query_approved(
+        let res = query_approval(
             deps.as_ref(),
             env.clone(),
             1,
@@ -423,12 +451,63 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            from_binary::<ApprovedResponse>(&res).unwrap(),
-            ApprovedResponse {
+            res,
+            ApprovalResponse {
                 approval: Approval {
                     operator: Addr::unchecked("operator"),
                     expires: Expiration::Never {}
                 }
+            }
+        );
+
+        // Unsuccessful query
+        // * operator not approved
+        let res = query_approval(
+            deps.as_ref(),
+            env.clone(),
+            1u64,
+            String::from("unknown"),
+            None,
+        )
+        .unwrap_err();
+        match res {
+            StdError::NotFound { .. } => {}
+            e => panic!("{:?}", e),
+        };
+    }
+
+    #[test]
+    fn approvals() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info("minter", &coins(0u128, &DENOM.to_string()));
+        let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
+        let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+        assert_eq!(res.messages.len(), 0);
+
+        // Mint a new token
+        let mint_msg = mint_msg("creator".to_string());
+        let msg = ExecuteMsg::Mint(mint_msg);
+        execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+        // Approve operator
+        let msg = ExecuteMsg::Approve {
+            operator: "operator".to_string(),
+            token_id: 1,
+            expires: None,
+        };
+        let info = mock_info("creator", &coins(0u128, &DENOM.to_string()));
+        execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+        let res = query_approvals(deps.as_ref(), env.clone(), 1u64, None).unwrap();
+
+        assert_eq!(
+            res,
+            ApprovalsResponse {
+                approvals: vec![Approval {
+                    operator: Addr::unchecked("operator"),
+                    expires: Expiration::Never {}
+                }]
             }
         )
     }
