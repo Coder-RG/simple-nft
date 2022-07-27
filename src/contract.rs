@@ -395,7 +395,7 @@ mod tests {
         let env = mock_env();
         let info = mock_info("creator", &coins(0, &DENOM.to_string()));
 
-        // Correct instantiation
+        // Successful instantiation
         let msg = init_msg("TestNFT".to_string(), "NFT".to_string());
         let res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
         assert_eq!(0, res.messages.len());
@@ -408,6 +408,7 @@ mod tests {
 
         // Following tests are to check correct error when no value is given
         // to either of the fields in InstantiateMsg.
+        // * Missing name
         let msg = init_msg(String::new(), "NFT".to_string());
         let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap_err();
 
@@ -416,6 +417,7 @@ mod tests {
             e => panic!("{:?}", e),
         }
 
+        // * Missing symbol
         let msg = init_msg(String::from("TestNFT"), String::new());
         let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap_err();
 
@@ -424,6 +426,7 @@ mod tests {
             e => panic!("{:?}", e),
         }
 
+        // * Missing name and symbol
         let msg = init_msg(String::from(""), String::from(""));
         let res = instantiate(deps.as_mut(), env, info, msg).unwrap_err();
 
@@ -511,6 +514,7 @@ mod tests {
         handle_mint(deps.as_mut(), env.clone(), info, mint_msg).unwrap();
 
         // Successful approval request
+        // * by owner
         let approve_msg = ExecuteMsg::Approve {
             operator: "operator".to_string(),
             token_id: 1u64,
@@ -525,6 +529,38 @@ mod tests {
         let token = query_tokens(deps.as_ref(), 1u64).unwrap();
         assert_eq!(token.approvals[0].operator, Addr::unchecked("operator"));
         assert_eq!(token.approvals[0].expires, Expiration::Never {});
+
+        // * by operator
+
+        // Approve all for operator1
+        let res = handle_approve_all(
+            deps.as_mut(),
+            env.clone(),
+            info.clone(),
+            String::from("operator1"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(res.messages.len(), 0);
+
+        // operator1 approves user1
+        let info = mock_info("operator1", &coins(0, &DENOM.to_string()));
+        let res = handle_approve(
+            deps.as_mut(),
+            env.clone(),
+            info.clone(),
+            "user1",
+            1u64,
+            None,
+        )
+        .unwrap();
+        assert_eq!(res.messages.len(), 0);
+        assert_eq!(res.attributes.len(), 4);
+        assert_eq!(res.attributes[1].value, String::from("operator1"));
+
+        let token = query_tokens(deps.as_ref(), 1u64).unwrap();
+        assert_eq!(token.approvals.len(), 2);
+        assert_eq!(token.approvals[1].operator, Addr::unchecked("user1"));
 
         // Unsuccessful approval request
         // * empty operator field
@@ -644,21 +680,35 @@ mod tests {
         // Mint a new token
         let mint_msg = mint_msg("owner".to_string());
         let _res = handle_mint(deps.as_mut(), env.clone(), info.clone(), mint_msg).unwrap();
+
+        // Approve operator1
         let approve_msg = ExecuteMsg::Approve {
-            operator: "operator".to_string(),
+            operator: "operator1".to_string(),
             token_id: 1u64,
             expires: None,
         };
         let info = mock_info("owner", &coins(0, &DENOM.to_string()));
         execute(deps.as_mut(), env.clone(), info.clone(), approve_msg).unwrap();
 
+        // Approve operator2
+        handle_approve(
+            deps.as_mut(),
+            env.clone(),
+            info.clone(),
+            "operator2",
+            1u64,
+            None,
+        )
+        .unwrap();
+
         let token = query_tokens(deps.as_ref(), 1u64).unwrap();
-        assert_eq!(token.approvals[0].operator, Addr::unchecked("operator"));
+        assert_eq!(token.approvals[0].operator, Addr::unchecked("operator1"));
         assert_eq!(token.approvals[0].expires, Expiration::Never {});
 
         // Successful approval revoke
+        // * by owner
         let revoke_msg = ExecuteMsg::Revoke {
-            operator: "operator".to_string(),
+            operator: "operator1".to_string(),
             token_id: 1u64,
         };
 
@@ -667,7 +717,30 @@ mod tests {
         assert_eq!(res.attributes.len(), 4);
 
         let token = query_tokens(deps.as_ref(), 1u64).unwrap();
-        assert_eq!(token.approvals, vec![]);
+        assert_eq!(token.approvals.len(), 1);
+
+        // * by operator
+        handle_approve_all(
+            deps.as_mut(),
+            env.clone(),
+            info.clone(),
+            String::from("operator"),
+            None,
+        )
+        .unwrap();
+
+        let info = mock_info("operator", &coins(0, &DENOM.to_string()));
+        handle_revoke(
+            deps.as_mut(),
+            env.clone(),
+            info.clone(),
+            String::from("operator2"),
+            1u64,
+        )
+        .unwrap();
+
+        let token = query_tokens(deps.as_ref(), 1u64).unwrap();
+        assert_eq!(token.approvals.len(), 0);
 
         // Unsuccessful approval revoke
         // * Invalid token id

@@ -1,6 +1,4 @@
-use cosmwasm_std::{
-    entry_point, from_binary, to_binary, Addr, Binary, Deps, Env, Order, StdError, StdResult,
-};
+use cosmwasm_std::{entry_point, to_binary, Addr, Binary, Deps, Env, Order, StdError, StdResult};
 use cw721::{Expiration, OperatorsResponse};
 use cw_storage_plus::Bound;
 use cw_utils::maybe_addr;
@@ -17,12 +15,12 @@ const MAX_LIMIT: u32 = 30;
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::AskingPrice { token_id } => query_asking_price(deps, env, token_id),
+        QueryMsg::AskingPrice { token_id } => to_binary(&query_asking_price(deps, env, token_id)?),
 
         QueryMsg::OwnerOf {
             token_id,
             include_expired,
-        } => query_owner_of(deps, env, token_id, include_expired),
+        } => to_binary(&query_owner_of(deps, env, token_id, include_expired)?),
 
         QueryMsg::Approval {
             token_id,
@@ -46,27 +44,33 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             include_expired,
             start_after,
             limit,
-        } => query_approved_for_all(deps, env, owner, include_expired, start_after, limit),
+        } => to_binary(&query_approved_for_all(
+            deps,
+            env,
+            owner,
+            include_expired,
+            start_after,
+            limit,
+        )?),
 
-        QueryMsg::NumTokens {} => query_num_tokens(deps, env),
+        QueryMsg::NumTokens {} => to_binary(&query_num_tokens(deps, env)?),
 
-        QueryMsg::ContractInfo {} => query_contract_info(deps, env),
+        QueryMsg::ContractInfo {} => to_binary(&query_contract_info(deps, env)?),
 
-        QueryMsg::NftInfo { token_id } => query_nft_info(deps, env, token_id),
+        QueryMsg::NftInfo { token_id } => to_binary(&query_nft_info(deps, env, token_id)?),
 
         QueryMsg::AllNftInfo {
             token_id,
             include_expired,
-        } => query_all_nft_info(deps, env, token_id, include_expired),
+        } => to_binary(&query_all_nft_info(deps, env, token_id, include_expired)?),
     }
 }
 
-pub fn query_asking_price(deps: Deps, _env: Env, token_id: u64) -> StdResult<Binary> {
+pub fn query_asking_price(deps: Deps, _env: Env, token_id: u64) -> StdResult<AskingPriceResponse> {
     let token_info = query_tokens(deps, token_id)?;
-    let response = AskingPriceResponse {
+    Ok(AskingPriceResponse {
         price: token_info.base_price,
-    };
-    to_binary(&response)
+    })
 }
 
 fn query_owner_of(
@@ -74,7 +78,7 @@ fn query_owner_of(
     env: Env,
     token_id: u64,
     include_expired: Option<bool>,
-) -> StdResult<Binary> {
+) -> StdResult<OwnerOfResponse> {
     let token = query_tokens(deps, token_id)?;
     let include_expired = include_expired.unwrap_or(false);
 
@@ -84,12 +88,10 @@ fn query_owner_of(
         .filter(|appr| include_expired || !appr.expires.is_expired(&env.block))
         .collect();
 
-    let result = OwnerOfResponse {
+    Ok(OwnerOfResponse {
         owner: token.owner.into_string(),
         approvals,
-    };
-
-    to_binary(&result)
+    })
 }
 
 fn query_approval(
@@ -149,7 +151,7 @@ fn query_approved_for_all(
     include_expired: Option<bool>,
     start_after: Option<String>,
     limit: Option<u32>,
-) -> StdResult<Binary> {
+) -> StdResult<OperatorsResponse> {
     let include_expired = include_expired.unwrap_or(false);
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
     let start_addr = maybe_addr(deps.api, start_after)?;
@@ -163,7 +165,7 @@ fn query_approved_for_all(
         .take(limit)
         .map(parse_approval)
         .collect();
-    to_binary(&OperatorsResponse { operators: res? })
+    Ok(OperatorsResponse { operators: res? })
 }
 
 fn parse_approval(item: StdResult<(Addr, Expiration)>) -> StdResult<cw721::Approval> {
@@ -173,27 +175,27 @@ fn parse_approval(item: StdResult<(Addr, Expiration)>) -> StdResult<cw721::Appro
     })
 }
 
-fn query_num_tokens(deps: Deps, _env: Env) -> StdResult<Binary> {
+fn query_num_tokens(deps: Deps, _env: Env) -> StdResult<NumTokensResponse> {
     let config = query_config(deps)?;
-    to_binary(&NumTokensResponse {
+    Ok(NumTokensResponse {
         tokens: config.num_tokens,
     })
 }
 
-fn query_contract_info(deps: Deps, _env: Env) -> StdResult<Binary> {
+fn query_contract_info(deps: Deps, _env: Env) -> StdResult<ContractInfoResponse> {
     let config = query_config(deps)?;
-    to_binary(&ContractInfoResponse {
+    Ok(ContractInfoResponse {
         name: config.name,
         symbol: config.symbol,
     })
 }
 
-fn query_nft_info(deps: Deps, _env: Env, token_id: u64) -> StdResult<Binary> {
+fn query_nft_info(deps: Deps, _env: Env, token_id: u64) -> StdResult<NftInfoResponse> {
     let token = query_tokens(deps, token_id)?;
     let res = NftInfoResponse {
         token_uri: token.token_uri.unwrap_or_else(|| "None".to_string()),
     };
-    to_binary(&res)
+    Ok(res)
 }
 
 fn query_all_nft_info(
@@ -201,17 +203,12 @@ fn query_all_nft_info(
     env: Env,
     token_id: u64,
     include_expired: Option<bool>,
-) -> StdResult<Binary> {
-    let owner: OwnerOfResponse = from_binary(&query_owner_of(
-        deps,
-        env.clone(),
-        token_id,
-        include_expired,
-    )?)?;
-    let nft: NftInfoResponse = from_binary(&query_nft_info(deps, env, token_id)?)?;
+) -> StdResult<AllNftInfoResponse> {
+    let owner = query_owner_of(deps, env.clone(), token_id, include_expired)?;
+    let nft = query_nft_info(deps, env, token_id)?;
 
     let res = AllNftInfoResponse { owner, info: nft };
-    to_binary(&res)
+    Ok(res)
 }
 
 pub fn query_config(deps: Deps) -> StdResult<State> {
@@ -307,7 +304,6 @@ mod tests {
 
         // Successful response
         let res = query_owner_of(deps.as_ref(), env.clone(), 1u64, None).unwrap();
-        let res: OwnerOfResponse = from_binary(&res).unwrap();
         assert_eq!(res.owner, "creator");
         assert_eq!(res.approvals, vec![]);
 
@@ -330,8 +326,7 @@ mod tests {
 
         // Query # of tokens after initialization
         let res = query_num_tokens(deps.as_ref(), env.clone()).unwrap();
-        let result: NumTokensResponse = from_binary(&res).unwrap();
-        assert_eq!(result.tokens, 0);
+        assert_eq!(res.tokens, 0);
 
         let mint_msg = mint_msg("creator".to_string());
         let msg = ExecuteMsg::Mint(mint_msg);
@@ -339,8 +334,7 @@ mod tests {
 
         // Query # of tokens after minting
         let res = query_num_tokens(deps.as_ref(), env.clone()).unwrap();
-        let result: NumTokensResponse = from_binary(&res).unwrap();
-        assert_eq!(result.tokens, 1);
+        assert_eq!(res.tokens, 1);
     }
 
     #[test]

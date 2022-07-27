@@ -142,11 +142,6 @@ pub struct ApprovalsResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct ApprovedForAllResponse {
-    pub approval: Vec<Approval>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct NumTokensResponse {
     pub tokens: u64,
 }
