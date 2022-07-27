@@ -76,19 +76,17 @@ fn query_owner_of(
     include_expired: Option<bool>,
 ) -> StdResult<Binary> {
     let token = query_tokens(deps, token_id)?;
+    let include_expired = include_expired.unwrap_or(false);
+
+    let approvals = token
+        .approvals
+        .into_iter()
+        .filter(|appr| include_expired || !appr.expires.is_expired(&env.block))
+        .collect();
 
     let result = OwnerOfResponse {
         owner: token.owner.into_string(),
-        approvals: match token.approvals {
-            Some(val) => {
-                if !val.expires.is_expired(&env.block) || include_expired.unwrap_or(false) {
-                    Some(val)
-                } else {
-                    None
-                }
-            }
-            None => None,
-        },
+        approvals,
     };
 
     to_binary(&result)
@@ -103,20 +101,24 @@ fn query_approval(
 ) -> StdResult<ApprovalResponse> {
     let token = query_tokens(deps, token_id)?;
     let operator_addr = deps.api.addr_validate(operator.as_str())?;
+    let include_expired = include_expired.unwrap_or(false);
 
-    if let Some(val) = token.approvals {
-        if val.operator == operator_addr
-            && (!val.expires.is_expired(&env.block) || include_expired.unwrap_or(false))
-        {
-            let res = ApprovalResponse {
-                approval: Approval {
-                    operator: operator_addr,
-                    expires: val.expires,
-                },
-            };
-            return Ok(res);
-        }
-    }
+    let appr: Vec<Approval> = token
+        .approvals
+        .into_iter()
+        .filter(|val| val.operator == operator_addr)
+        .collect();
+
+    if !appr.is_empty() && (include_expired || !appr[0].expires.is_expired(&env.block)) {
+        let res = ApprovalResponse {
+            approval: Approval {
+                operator: operator_addr,
+                expires: appr[0].expires,
+            },
+        };
+
+        return Ok(res);
+    };
     Err(StdError::NotFound {
         kind: String::from("Approval not found for given address"),
     })
@@ -129,13 +131,14 @@ fn query_approvals(
     include_expired: Option<bool>,
 ) -> StdResult<ApprovalsResponse> {
     let include_expired = include_expired.unwrap_or(false);
-    let mut res: Vec<Approval> = vec![];
     let token = query_tokens(deps, token_id)?;
-    if let Some(val) = token.approvals {
-        if include_expired || !val.expires.is_expired(&env.block) {
-            res.push(val);
-        }
-    };
+
+    let res = token
+        .approvals
+        .into_iter()
+        .filter(|appr| include_expired || !appr.expires.is_expired(&env.block))
+        .collect();
+
     Ok(ApprovalsResponse { approvals: res })
 }
 
@@ -306,7 +309,7 @@ mod tests {
         let res = query_owner_of(deps.as_ref(), env.clone(), 1u64, None).unwrap();
         let res: OwnerOfResponse = from_binary(&res).unwrap();
         assert_eq!(res.owner, "creator");
-        assert_eq!(res.approvals, None);
+        assert_eq!(res.approvals, vec![]);
 
         // Unsuccessful response
         let res = query_owner_of(deps.as_ref(), env.clone(), 2u64, Some(true)).unwrap_err();
@@ -391,7 +394,7 @@ mod tests {
             result.owner,
             OwnerOfResponse {
                 owner: String::from("owner"),
-                approvals: None,
+                approvals: vec![],
             }
         );
         assert_eq!(

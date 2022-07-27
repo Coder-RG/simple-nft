@@ -21,7 +21,7 @@ pub struct TokenInfo {
     /// Owner of the new token
     pub owner: Addr,
     /// Approvals to third-party to perform actions on this token
-    pub approvals: Option<Approval>,
+    pub approvals: Vec<Approval>,
     /// Base price of this token
     pub base_price: Vec<Coin>,
     /// URI of NFT according to ERC 721 Metadata Schema

@@ -3,6 +3,7 @@
   "title": "TokenInfo",
   "type": "object",
   "required": [
+    "approvals",
     "base_price",
     "owner",
     "token_id"
@@ -10,14 +11,10 @@
   "properties": {
     "approvals": {
       "description": "Approvals to third-party to perform actions on this token",
-      "anyOf": [
-        {
-          "$ref": "#/definitions/Approval"
-        },
-        {
-          "type": "null"
-        }
-      ]
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Approval"
+      }
     },
     "base_price": {
       "description": "Base price of this token",

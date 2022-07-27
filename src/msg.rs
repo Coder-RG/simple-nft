@@ -128,7 +128,7 @@ pub struct AskingPriceResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct OwnerOfResponse {
     pub owner: String,
-    pub approvals: Option<Approval>,
+    pub approvals: Vec<Approval>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

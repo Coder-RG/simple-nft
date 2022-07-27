@@ -93,7 +93,7 @@ pub fn execute(
     }
 }
 
-pub fn check_is_authorized(
+pub fn authorized_to_send(
     deps: Deps,
     env: &Env,
     info: &MessageInfo,
@@ -104,17 +104,43 @@ pub fn check_is_authorized(
         return Ok(());
     };
 
-    let token_appr = token.approvals;
-    if let Some(val) = token_appr {
-        if val.operator == info.sender && !val.expires.is_expired(&env.block) {
-            return Ok(());
-        }
-    };
+    let token_appr = token
+        .approvals
+        .iter()
+        .any(|val| val.operator == info.sender && !val.expires.is_expired(&env.block));
+
+    if token_appr {
+        return Ok(());
+    }
+
     let super_appr = OPERATORS.may_load(deps.storage, (&token.owner, &info.sender))?;
     if let Some(val) = super_appr {
         if !val.is_expired(&env.block) {
             return Ok(());
         }
+    };
+    Err(ContractError::Unauthorized)
+}
+
+fn authorized_to_approve(
+    deps: Deps,
+    env: &Env,
+    info: &MessageInfo,
+    token_id: u64,
+) -> Result<(), ContractError> {
+    let token = query_tokens(deps, token_id)?;
+    // Either token owner can approve
+    if token.owner == info.sender {
+        return Ok(());
+    };
+
+    // Or operator(with approve all) can approve
+    let super_appr = OPERATORS.may_load(deps.storage, (&token.owner, &info.sender))?;
+
+    if let Some(val) = super_appr {
+        if !val.is_expired(&env.block) {
+            return Ok(());
+        };
     };
     Err(ContractError::Unauthorized)
 }
@@ -128,10 +154,10 @@ pub fn handle_transfer_nft(
 ) -> Result<Response, ContractError> {
     let mut requested_token = TOKENS.load(deps.storage, token_id)?;
 
-    check_is_authorized(deps.as_ref(), &env, &info, token_id)?;
+    authorized_to_send(deps.as_ref(), &env, &info, token_id)?;
 
     requested_token.owner = deps.api.addr_validate(&recipient)?;
-    requested_token.approvals = None;
+    requested_token.approvals = vec![];
 
     TOKENS.save(deps.storage, token_id, &requested_token)?;
 
@@ -176,9 +202,9 @@ pub fn handle_approve(
 ) -> Result<Response, ContractError> {
     // Load the token with given token id
     let mut token = query_tokens(deps.as_ref(), token_id)?;
-    if info.sender != token.owner {
-        return Err(ContractError::Unauthorized);
-    };
+
+    authorized_to_approve(deps.as_ref(), &env, &info, token_id)?;
+
     let appr = Approval {
         operator: deps.api.addr_validate(operator)?,
         expires: match expires {
@@ -191,7 +217,8 @@ pub fn handle_approve(
         return Err(ContractError::Expired);
     }
     // Apply approval to the token
-    token.approvals = Some(appr);
+    token.approvals.push(appr);
+
     TOKENS.save(deps.storage, token_id, &token)?;
 
     Ok(Response::new()
@@ -236,24 +263,29 @@ fn handle_approve_all(
 
 pub fn handle_revoke(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     operator: String,
     token_id: u64,
 ) -> Result<Response, ContractError> {
     let mut token = query_tokens(deps.as_ref(), token_id)?;
-    if info.sender != token.owner {
-        return Err(ContractError::Unauthorized);
-    } else if token.approvals.is_none() {
-        return Err(ContractError::ApprovalNotFound { operator });
-    }
-    let revoked = token.approvals.unwrap();
-    token.approvals = None;
+
+    authorized_to_approve(deps.as_ref(), &env, &info, token_id)?;
+
+    let operator_addr = deps.api.addr_validate(operator.as_str())?;
+    let revoked: Vec<Approval> = token
+        .approvals
+        .into_iter()
+        .filter(|val| val.operator != operator_addr)
+        .collect();
+
+    token.approvals = revoked;
     TOKENS.save(deps.storage, token_id, &token)?;
+
     Ok(Response::new()
         .add_attribute("action", "revoke")
         .add_attribute("from", info.sender)
-        .add_attribute("revoked", revoked.operator)
+        .add_attribute("revoked", operator)
         .add_attribute("token_id", token_id.to_string()))
 }
 
@@ -316,7 +348,7 @@ pub fn handle_mint(
     // Create a new token
     let token = TokenInfo {
         owner: deps.api.addr_validate(&msg.owner)?,
-        approvals: None,
+        approvals: vec![],
         token_uri: msg.token_uri,
         base_price: msg.price,
         token_id: num_tokens,
@@ -420,7 +452,7 @@ mod tests {
         assert_eq!(stored_token.owner, "creator");
         assert_eq!(stored_token.token_id, 1);
         assert_eq!(stored_token.base_price, coins(1000, DENOM.to_string()));
-        assert_eq!(stored_token.approvals, None);
+        assert_eq!(stored_token.approvals, vec![]);
         assert_eq!(stored_token.token_uri, None);
 
         // Unsuccessful token minting
@@ -491,11 +523,8 @@ mod tests {
         assert_eq!(res.attributes.len(), 4);
 
         let token = query_tokens(deps.as_ref(), 1u64).unwrap();
-        assert_eq!(
-            token.approvals.as_ref().unwrap().operator,
-            Addr::unchecked("operator")
-        );
-        assert_eq!(token.approvals.unwrap().expires, Expiration::Never {});
+        assert_eq!(token.approvals[0].operator, Addr::unchecked("operator"));
+        assert_eq!(token.approvals[0].expires, Expiration::Never {});
 
         // Unsuccessful approval request
         // * empty operator field
@@ -613,21 +642,19 @@ mod tests {
         assert_eq!(0, res.messages.len());
 
         // Mint a new token
-        let mint_msg = mint_msg("owner1".to_string());
+        let mint_msg = mint_msg("owner".to_string());
         let _res = handle_mint(deps.as_mut(), env.clone(), info.clone(), mint_msg).unwrap();
         let approve_msg = ExecuteMsg::Approve {
             operator: "operator".to_string(),
             token_id: 1u64,
             expires: None,
         };
-        let info = mock_info("owner1", &coins(0, &DENOM.to_string()));
+        let info = mock_info("owner", &coins(0, &DENOM.to_string()));
         execute(deps.as_mut(), env.clone(), info.clone(), approve_msg).unwrap();
 
         let token = query_tokens(deps.as_ref(), 1u64).unwrap();
-        assert_eq!(
-            token.approvals.unwrap().operator,
-            Addr::unchecked("operator")
-        );
+        assert_eq!(token.approvals[0].operator, Addr::unchecked("operator"));
+        assert_eq!(token.approvals[0].expires, Expiration::Never {});
 
         // Successful approval revoke
         let revoke_msg = ExecuteMsg::Revoke {
@@ -640,7 +667,7 @@ mod tests {
         assert_eq!(res.attributes.len(), 4);
 
         let token = query_tokens(deps.as_ref(), 1u64).unwrap();
-        assert_eq!(token.approvals, None);
+        assert_eq!(token.approvals, vec![]);
 
         // Unsuccessful approval revoke
         // * Invalid token id
@@ -661,11 +688,9 @@ mod tests {
             token_id: 1u64,
         };
 
-        let res = execute(deps.as_mut(), env.clone(), info.clone(), revoke_msg).unwrap_err();
-        match res {
-            ContractError::ApprovalNotFound { .. } => {}
-            e => panic!("{:?}", e),
-        };
+        let res = execute(deps.as_mut(), env.clone(), info.clone(), revoke_msg).unwrap();
+        assert_eq!(res.messages.len(), 0);
+        assert_eq!(res.attributes.len(), 4);
 
         // * Unauthorised sender
         let info = mock_info("owner2", &coins(0, &DENOM.to_string()));
@@ -778,13 +803,13 @@ mod tests {
 
         // Add approval to the token
         let mut token = query_tokens(deps.as_ref(), 1u64).unwrap();
-        token.approvals = Some(Approval {
+        token.approvals.push(Approval {
             operator: Addr::unchecked("operator"),
             expires: Expiration::Never {},
         });
         TOKENS.save(&mut deps.storage, 1u64, &token).unwrap();
 
-        // *operator* should not be capable of transferring the token
+        // *operator* should now be capable of transferring the token
         let info = mock_info("operator", &coins(0u128, &DENOM.to_string()));
         let msg = ExecuteMsg::TransferNft {
             recipient: String::from("recipient"),
