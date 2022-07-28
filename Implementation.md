@@ -11,6 +11,25 @@ For the following commands, four addresses have been used:
 
 Keep note which address is being used at various places, like *owner* and *operator*.
 
+## Table of Content
+1. [Execute](#execute)
+   1. [Mint](#mint)
+   2. [Approve](#approve)
+   3. [Transfer](#transfer)
+   4. [Revoke](#revoke)
+   5. [Approve all](#approve-all)
+   6. [Revoke all](#revoke-all)
+2. [Query](#query)
+   1. [Asking price](#asking-price)
+   2. [Owner of](#owner-of)
+   3. [Approval](#approval)
+   4. [Approvals](#approvals)
+   5. [All Operator](#all-operator)
+   6. [Number of tokens](#number-of-tokens)
+   7. [NFT info](#nft-info)
+   8. [All NFT info](#all-nft-info)
+   9. [Contract Info](#contract-info)
+
 ## Execute
 
 ### Mint
@@ -154,7 +173,6 @@ wasmd tx wasm execute $CONTRACT $APPROVE_ALL --from wallet $TXFLAG -y --output j
 ```zsh
 APPROVE_ALL='{"approve_all":{"operator":"wasm10macmllfdsf9dkmgd6sxmcpv8umgkdq8e4rmrm", "expires":{"at_height":886820}}}'
 ```
-```json
 
 **Querying all operators for **:
 ```json
